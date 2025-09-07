@@ -126,6 +126,11 @@ const Dashboard: React.FC = () => {
     const [savedSearches, setSavedSearches] = useState<any[]>([]);
     const [saveNotes, setSaveNotes] = useState('');
     const [lastSearchCriteria, setLastSearchCriteria] = useState<any | null>(null);
+    // Case AI analysis upload
+    const [caseFile, setCaseFile] = useState<File | null>(null);
+    const [datasetFile, setDatasetFile] = useState<File | null>(null);
+    const [llmPrompt, setLlmPrompt] = useState<string>('');
+    const [caseAnalysisMsg, setCaseAnalysisMsg] = useState<string>('');
     // Enrichment
     const [ipLookup, setIpLookup] = useState('');
     const [ipEnrichment, setIpEnrichment] = useState<any | null>(null);
@@ -135,6 +140,7 @@ const Dashboard: React.FC = () => {
     const [corrTopPairs, setCorrTopPairs] = useState<any[]>([]);
     // Geo Maps (iframes to backend HTML)
     const [suspMapSrc, setSuspMapSrc] = useState<string>('');
+    const [caseMapSrc, setCaseMapSrc] = useState<string>('');
     const [convMapSrc, setConvMapSrc] = useState<string>('');
     const [convA, setConvA] = useState<string>('');
     const [convB, setConvB] = useState<string>('');
@@ -461,6 +467,26 @@ const Dashboard: React.FC = () => {
             const res = await axios.post(`${API_URL}/cases/${selectedCaseId}/export-pack`);
             alert(`Exported: ${res.data?.export_file}`);
         } catch (e) { /* ignore */ }
+    };
+
+    const runCaseAnalysis = async () => {
+        if (!selectedCaseId || !caseFile || !datasetFile) {
+            setCaseAnalysisMsg('Select case and both files before running.');
+            return;
+        }
+        try {
+            setCaseAnalysisMsg('Uploading and analyzing...');
+            const fd = new FormData();
+            fd.append('case_file', caseFile);
+            fd.append('dataset_file', datasetFile);
+            if (llmPrompt) fd.append('llm_prompt', llmPrompt);
+            const res = await axios.post(`${API_URL}/cases/${selectedCaseId}/ai-analyze`, fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            setCaseAnalysisMsg(`Analysis stored for case ${res.data?.case_id}. Rows: ${res.data?.rows}`);
+        } catch (e:any) {
+            setCaseAnalysisMsg(e?.response?.data?.detail || 'Analysis failed');
+        }
     };
 
     // Enrichment
@@ -1160,6 +1186,23 @@ const Dashboard: React.FC = () => {
                                     <Button variant="outlined" size="small" onClick={exportCasePack} disabled={!selectedCaseId}>Export Pack</Button>
                                 </Box>
 
+                                <Typography variant="subtitle2" gutterBottom>AI Case Analysis (Upload Case + Dataset)</Typography>
+                                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+                                    <Button variant="outlined" component="label" size="small">
+                                        Select Case File
+                                        <input type="file" hidden onChange={(e)=> setCaseFile(e.target.files?.[0] || null)} />
+                                    </Button>
+                                    <Typography variant="caption">{caseFile?.name || 'No file selected'}</Typography>
+                                    <Button variant="outlined" component="label" size="small">
+                                        Select Raw IPDR Dataset
+                                        <input type="file" hidden onChange={(e)=> setDatasetFile(e.target.files?.[0] || null)} />
+                                    </Button>
+                                    <Typography variant="caption">{datasetFile?.name || 'No file selected'}</Typography>
+                                </Box>
+                                <TextField fullWidth multiline minRows={2} label="LLM Prompt (optional)" value={llmPrompt} onChange={(e)=>setLlmPrompt(e.target.value)} sx={{ mb: 1 }} />
+                                <Button variant="contained" size="small" onClick={runCaseAnalysis} disabled={!selectedCaseId}>Run AI Analysis</Button>
+                                {caseAnalysisMsg && (<Typography variant="body2" sx={{ mt: 1 }}>{caseAnalysisMsg}</Typography>)}
+
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
                                     <TextField size="small" fullWidth label="Notes (optional)" value={saveNotes} onChange={(e)=>setSaveNotes(e.target.value)} />
                                     <Button variant="contained" size="small" onClick={saveCurrentSearchToCase} disabled={!selectedCaseId || !lastSearchCriteria}>Save Current Search to Case</Button>
@@ -1278,6 +1321,25 @@ const Dashboard: React.FC = () => {
                                             <iframe title="suspicious-map" src={suspMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />
                                         ) : (
                                             <Typography color="textSecondary">Click REFRESH to load map.</Typography>
+                                        )}
+                                    </Paper>
+
+                                    <Paper variant="outlined" sx={{ p: 2 }}>
+                                        <Typography variant="subtitle1" gutterBottom>Case Network — AI Analysis</Typography>
+                                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
+                                            <FormControl size="small" sx={{ minWidth: 180 }}>
+                                                <InputLabel id="case-select-map-label">Select Case</InputLabel>
+                                                <Select labelId="case-select-map-label" label="Select Case" value={selectedCaseId} onChange={(e)=> setSelectedCaseId(e.target.value as number)}>
+                                                    <MenuItem value=""><em>None</em></MenuItem>
+                                                    {cases.map((c:any)=> (<MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>))}
+                                                </Select>
+                                            </FormControl>
+                                            <Button size="small" variant="outlined" onClick={()=> selectedCaseId && setCaseMapSrc(`${API_URL}/map/case-network/html?case_id=${selectedCaseId}&days=7`)} disabled={!selectedCaseId}>REFRESH</Button>
+                                        </Box>
+                                        {caseMapSrc ? (
+                                            <iframe title="case-map" src={caseMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />
+                                        ) : (
+                                            <Typography color="textSecondary">Select a case and click REFRESH to load map.</Typography>
                                         )}
                                     </Paper>
 

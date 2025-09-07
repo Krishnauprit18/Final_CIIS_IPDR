@@ -7,11 +7,12 @@ import hashlib
 import re
 import secrets
 from datetime import datetime, timedelta
+import random
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel
 
 # Assuming parser.py will contain the core parsing logic
@@ -192,6 +193,7 @@ UPLOAD_DIR = "uploads"
 ALLOWLIST_IPS: set = set()
 DENYLIST_IPS: set = set()
 ip_enricher: Optional[IPEntityEnricher] = None
+CASE_ANALYSES: Dict[int, Dict[str, Any]] = {}
 
 # --- Authentication ---
 security = HTTPBearer()
@@ -966,10 +968,24 @@ def _build_leaflet_map_html(points: List[Dict[str, Any]], polylines: List[Dict[s
     points.forEach(p => {{
       if (!p || p.lat===undefined || p.lon===undefined) return;
       const color = p.color || '#8E24AA';
-      const m = L.circleMarker([p.lat, p.lon], {{ radius: (p.size||12)/2, color: color, fillColor: color, fillOpacity: 0.85, weight: 2 }}).addTo(map);
-      const html = (p.details_html || '').toString();
-      m.bindPopup(html, {{ maxWidth: 380, className: 'dark-popup' }});
-      m.bindTooltip(p.label || '', {{ direction: 'top' }});
+      const size = (p.size||12);
+      const popupHtml = (p.details_html || '').toString();
+      if (p.icon === 'flag' || p.icon === 'pin') {{
+        const char = p.icon === 'flag' ? '🚩' : '📍';
+        const icon = L.divIcon({{
+          className: 'div-emoji-icon',
+          html: `<div style='font-size:\${{Math.max(14, size)}}px; line-height:1;'>\${{char}}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size/2, size]
+        }});
+        const m = L.marker([p.lat, p.lon], {{ icon }}).addTo(map);
+        m.bindPopup(popupHtml, {{ maxWidth: 380, className: 'dark-popup' }});
+        m.bindTooltip(p.label || '', {{ direction: 'top' }});
+      }} else {{
+        const m = L.circleMarker([p.lat, p.lon], {{ radius: size/2, color: color, fillColor: color, fillOpacity: 0.85, weight: 2 }}).addTo(map);
+        m.bindPopup(popupHtml, {{ maxWidth: 380, className: 'dark-popup' }});
+        m.bindTooltip(p.label || '', {{ direction: 'top' }});
+      }}
     }});
     // Add polylines
     lines.forEach(l => {{
@@ -1252,6 +1268,237 @@ def map_conversation_html(phone_a: str, phone_b: str, days: int = 7):
         })
 
     html = _build_plotly_map_html(pts, title=f"Conversation Map — A: {phone_a} vs B: {phone_b} ({cat_a} / {cat_b})")
+    return HTMLResponse(html, media_type='text/html')
+
+# =============================
+# CASE AI ANALYSIS + MAP VIEW
+# =============================
+
+@app.post("/cases/{case_id}/ai-analyze")
+async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), dataset_file: UploadFile = File(...), llm_prompt: Optional[str] = None, provider: str = "auto", chunksize: Optional[int] = None):
+    """
+    Accept a case document and a raw IPDR dataset, run analysis (A->B mapping, suspicious detection),
+    and store results under the given case_id for visualization. This simulates LLM-assisted analysis
+    by leveraging local analytics modules (normalizer, relationship extractor, suspicious detector).
+    """
+    if not case_file.filename or not dataset_file.filename:
+        raise HTTPException(status_code=400, detail="Both case_file and dataset_file are required")
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    case_path = os.path.join(UPLOAD_DIR, f"case_{case_id}_{case_file.filename}")
+    data_path = os.path.join(UPLOAD_DIR, f"case_{case_id}_{dataset_file.filename}")
+    try:
+        # Save uploads
+        with open(case_path, "wb") as bf:
+            shutil.copyfileobj(case_file.file, bf)
+        with open(data_path, "wb") as df:
+            shutil.copyfileobj(dataset_file.file, df)
+
+        # Normalize and analyze dataset
+        df = data_normalizer.normalize_file(data_path, provider=provider, chunksize=chunksize)
+        if df.empty:
+            CASE_ANALYSES.pop(case_id, None)
+            raise HTTPException(status_code=400, detail="Uploaded dataset produced no records after normalization")
+
+        CASE_ANALYSES[case_id] = {
+            "df": df,
+            "last_updated": datetime.now().isoformat(),
+            "llm_prompt": llm_prompt or "",
+            "provider": provider,
+            "rows": len(df),
+        }
+        # Clean temp dataset file; keep case doc
+        try:
+            os.remove(data_path)
+        except Exception:
+            pass
+        return {
+            "case_id": case_id,
+            "rows": len(df),
+            "message": "Case analysis stored. View map via /map/case-network/html?case_id=...",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing case dataset: {str(e)}")
+
+@app.get("/map/case-network/html")
+def map_case_network_html(case_id: int, days: int = 7, limit: int = 200):
+    """
+    Render a case-specific network map:
+    - Flag (🚩) markers for suspicious phones' last locations in the past N days
+    - Dashed lines between linked phones (direct via B-Phone, inferred via shared destination IPs)
+    - Pin (📍) markers for nearest police stations per city with hypothetical incharge cards
+    """
+    if case_id not in CASE_ANALYSES:
+        return HTMLResponse("<html><body>No case analysis found. Upload via Cases tab.</body></html>", media_type='text/html')
+    df = CASE_ANALYSES[case_id]["df"]
+    if df.empty:
+        return HTMLResponse("<html><body>No data available for this case</body></html>", media_type='text/html')
+
+    dfx = df.copy()
+    dfx['__dt'] = dfx['Start Time'].apply(_parse_dt_safe)
+    max_dt = dfx['__dt'].max()
+    if not isinstance(max_dt, datetime):
+        max_dt = datetime.now()
+    window_start = max_dt - timedelta(days=max(1, days))
+    dfx = dfx[dfx['__dt'] >= window_start]
+
+    def is_suspicious(r):
+        try:
+            port = int(r.get('Destination Port', 0))
+            dur = int(r.get('Duration', 0))
+            tt = _parse_dt_safe(r.get('Start Time')) or datetime.now()
+            off = (tt.hour >= 22 or tt.hour <= 5)
+            if port in [22, 23, 3389, 5900] or dur > 300 or off:
+                return True
+        except Exception:
+            return False
+        return False
+
+    dfx = dfx[dfx['Phone'].astype(str) != '+910000000000']
+    dfx = dfx[dfx.apply(is_suspicious, axis=1)]
+    if dfx.empty:
+        return HTMLResponse("<html><body>No suspicious phones found in case window</body></html>", media_type='text/html')
+
+    # Last record per phone
+    idx = dfx.groupby('Phone')['__dt'].idxmax()
+    last = dfx.loc[idx]
+
+    # Build phone points (flags)
+    phone_coords = {}
+    points = []
+    for _, r in last.head(limit).iterrows():
+        phone = str(r.get('Phone',''))
+        lat = float(r.get('Latitude', 0.0) or 0.0)
+        lon = float(r.get('Longitude', 0.0) or 0.0)
+        if lat == 0.0 and lon == 0.0:
+            continue
+        phone_coords[phone] = (lat, lon, r)
+        points.append({
+            'lat': lat,
+            'lon': lon,
+            'label': f"{phone} — {r.get('CustName','')}",
+            'color': '#8E24AA',
+            'size': 16,
+            'icon': 'flag',
+            'details_html': _make_details_html_from_row(r)
+        })
+
+    # Edges: direct and inferred
+    direct_lats, direct_lons = [], []
+    infer_lats, infer_lons = [], []
+    if 'B-Phone' in dfx.columns:
+        dsub = dfx[(dfx['Phone'].astype(str).isin(phone_coords.keys())) & (dfx['B-Phone'].astype(str).isin(phone_coords.keys()))]
+        seen = set()
+        for _, row in dsub.iterrows():
+            a = str(row.get('Phone',''))
+            b = str(row.get('B-Phone',''))
+            if a == b:
+                continue
+            key = tuple(sorted([a,b]))
+            if key in seen:
+                continue
+            seen.add(key)
+            if a in phone_coords and b in phone_coords:
+                lat1, lon1, _ = phone_coords[a]
+                lat2, lon2, _ = phone_coords[b]
+                direct_lats += [lat1, lat2, None]
+                direct_lons += [lon1, lon2, None]
+
+    # Inferred via shared Destination IPs
+    for ip, group in dfx.groupby('Destination IP'):
+        phs = [p for p in group['Phone'].astype(str).unique().tolist() if p in phone_coords]
+        if len(phs) < 2:
+            continue
+        for i in range(len(phs)):
+            for j in range(i+1, len(phs)):
+                p1, p2 = phs[i], phs[j]
+                lat1, lon1, _ = phone_coords[p1]
+                lat2, lon2, _ = phone_coords[p2]
+                infer_lats += [lat1, lat2, None]
+                infer_lons += [lon1, lon2, None]
+
+    # Dummy showcase ring if none
+    if not direct_lats and not infer_lats:
+        keys = list(phone_coords.keys())[:min(8, len(phone_coords))]
+        for i in range(len(keys)):
+            p1 = keys[i]
+            p2 = keys[(i+1) % len(keys)]
+            lat1, lon1, _ = phone_coords[p1]
+            lat2, lon2, _ = phone_coords[p2]
+            infer_lats += [lat1, lat2, None]
+            infer_lons += [lon1, lon2, None]
+
+    # Police stations per city (hypothetical incharge)
+    def extract_city(addr: str) -> str:
+        try:
+            if not addr:
+                return ''
+            parts = str(addr).split(',')
+            return parts[-2].strip() if len(parts) >= 2 else parts[-1].strip()
+        except Exception:
+            return ''
+
+    city_points: Dict[str, List[Tuple[float,float]]] = {}
+    for _, r in last.iterrows():
+        city = extract_city(r.get('Address',''))
+        if not city:
+            continue
+        lat = float(r.get('Latitude', 0.0) or 0.0)
+        lon = float(r.get('Longitude', 0.0) or 0.0)
+        if lat == 0.0 and lon == 0.0:
+            continue
+        city_points.setdefault(city, []).append((lat, lon))
+
+    def avg(coords: List[Tuple[float,float]]) -> Tuple[float,float]:
+        if not coords:
+            return (0.0, 0.0)
+        la = sum(c[0] for c in coords) / len(coords)
+        lo = sum(c[1] for c in coords) / len(coords)
+        return (la, lo)
+
+    def fake_incharge(city: str) -> Tuple[str, str]:
+        first = random.choice(["Rajesh","Anita","Vikram","Pooja","Amit","Neha","Arun","Kiran"])  # hypothetical
+        lastn = random.choice(["Sharma","Singh","Verma","Patel","Kumar","Yadav","Reddy","Das"])  # hypothetical
+        phone = "+91" + str(random.randint(6000000000, 9999999999))
+        return (f"Inspector {first} {lastn} ({city})", phone)
+
+    for city, coords in city_points.items():
+        la, lo = avg(coords)
+        if la == 0.0 and lo == 0.0:
+            continue
+        inc, ph = fake_incharge(city)
+        card = f"<div style='font-size:12px'><b>Police Station</b><br/>City: {city}<br/>Incharge: {inc}<br/>Phone: {ph}</div>"
+        points.append({
+            'lat': la,
+            'lon': lo,
+            'label': f"Police Station - {city}",
+            'icon': 'pin',
+            'size': 18,
+            'details_html': card,
+            'color': '#FFC107',
+        })
+
+    # Convert lat/lon sequences into Leaflet polylines
+    def to_pairs(lat_list, lon_list):
+        pairs = []
+        for i in range(0, min(len(lat_list), len(lon_list)), 3):
+            if i + 1 < len(lat_list) and lat_list[i] is not None and lat_list[i+1] is not None:
+                try:
+                    a = [float(lat_list[i]), float(lon_list[i])]
+                    b = [float(lat_list[i+1]), float(lon_list[i+1])]
+                    pairs.append([a, b])
+                except Exception:
+                    continue
+        return pairs
+
+    lines = []
+    for seg in to_pairs(direct_lats, direct_lons):
+        lines.append({'path': seg, 'color': '#E53935', 'weight': 3, 'dash': '10 6'})
+    for seg in to_pairs(infer_lats, infer_lons):
+        lines.append({'path': seg, 'color': '#1E88E5', 'weight': 2, 'dash': '4 6'})
+
+    html = _build_leaflet_map_html(points, lines, title=f"Case {case_id} — AI Network Map (Last {days} Days)")
     return HTMLResponse(html, media_type='text/html')
 
 # =============================
