@@ -1,0 +1,3 @@
+proto	source_addr	sport	dest_addr	dport	start_ts	end_ts	dur	nat_addr	nat_port	device	uid	sub_id	cname	addr	mail	tel	alt_tel	cid	ip_mode	lat	lng
+TCP	192.168.105.244	58502	115.176.34.14	80	2025-08-23-11:01:06	2025-08-23-11:04:10	184	22.56.97.56	33598	BRAS-007	user0128	SUB100128	Vivaan Bose	241, Park Street, Chennai, India	vivaan.bose826@example.in	+919700886008	+919700886840	CUST200128	static	13.09574	80.25942
+TCP	172.17.203.180	3474	113.155.45.215	80	2025-08-25-00:54:28	2025-08-25-00:56:49	141	95.204.153.126	52466	CGNAT-005	user0233	SUB100233	Ananya Iyer	195, Bannerghatta Rd, Lucknow, India	ananya.iyer225@gmail.com	+916392827229	+916392827275	CUST200233	static	26.8379	81.00432

@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pandas
+python-multipart
+PyYAML
+networkx
+chardet
+lxml
+matplotlib
+seaborn
+plotly
+kaleido
+scikit-learn
+scipy

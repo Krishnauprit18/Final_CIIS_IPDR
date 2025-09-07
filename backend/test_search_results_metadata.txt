@@ -1,0 +1,7 @@
+Search Results Metadata
+==============================
+Total records in dataset: 1000
+Filtered records returned: 757
+Search time: 0.85 ms
+Search criteria used:
+  - Protocol equals 'TCP'

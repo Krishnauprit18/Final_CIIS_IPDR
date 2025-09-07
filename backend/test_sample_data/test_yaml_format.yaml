@@ -1,0 +1,46 @@
+records:
+  - Protocol: ICMP
+    Source_IP: 172.28.79.204
+    Source_Port: 0
+    Destination_IP: 52.135.36.109
+    Destination_Port: 0
+    Start_Time: "2025-08-24-01:19:51"
+    End_Time: "2025-08-24-01:21:11"
+    Duration: 80
+    NAT_IP: 223.46.55.232
+    NAT_Port: 7463
+    Device: CGNAT-004
+    UserID: user0107
+    SubscriberID: SUB100107
+    CustName: Aadhya Gupta
+    Address: "64, Nehru Marg, Kolkata, India"
+    Email: aadhya.gupta981@outlook.com
+    Phone: "+918786527858"
+    Alt-Phone: "+918786527497"
+    CustID: CUST200107
+    IP_Type: dynamic
+    Latitude: 22.56277
+    Longitude: 88.39398
+  
+  - Protocol: TCP
+    Source_IP: 10.1.13.89
+    Source_Port: 3909
+    Destination_IP: 223.51.52.199
+    Destination_Port: 5222
+    Start_Time: "2025-08-29-12:08:04"
+    End_Time: "2025-08-29-12:10:28"
+    Duration: 144
+    NAT_IP: 79.156.120.192
+    NAT_Port: 62125
+    Device: CGNAT-004
+    UserID: user0077
+    SubscriberID: SUB100077
+    CustName: Aadhya Nair
+    Address: "154, MG Road, Kolkata, India"
+    Email: aadhya.nair696@yahoo.com
+    Phone: "+917037788925"
+    Alt-Phone: "+917037788466"
+    CustID: CUST200077
+    IP_Type: dynamic
+    Latitude: 22.57099
+    Longitude: 88.41694

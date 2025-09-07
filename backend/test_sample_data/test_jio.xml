@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipdr_records>
+  <record>
+    <session_start>2025-08-23-07:32:55</session_start>
+    <session_end>2025-08-23-07:33:57</session_end>
+    <source_ip_address>172.16.6.122</source_ip_address>
+    <source_port>31490</source_port>
+    <destination_ip_address>188.202.186.57</destination_ip_address>
+    <destination_port>80</destination_port>
+    <protocol_type>TCP</protocol_type>
+    <session_duration>62</session_duration>
+    <nat_address>30.66.210.185</nat_address>
+    <nat_port_number>2595</nat_port_number>
+    <network_device>CGNAT-003</network_device>
+    <user_identifier>user0054</user_identifier>
+    <subscriber_identity>SUB100054</subscriber_identity>
+    <customer_name>Aditya Reddy</customer_name>
+    <billing_address>76, Nehru Marg, Mumbai, India</billing_address>
+    <email_id>aditya.reddy589@yahoo.com</email_id>
+    <subscriber_number>+918946474367</subscriber_number>
+    <alternate_number>+918946474369</alternate_number>
+    <customer_code>CUST200054</customer_code>
+    <ip_allocation_type>static</ip_allocation_type>
+    <location_lat>19.10121</location_lat>
+    <location_lon>72.82588</location_lon>
+  </record>
+  <record>
+    <session_start>2025-08-28-10:15:13</session_start>
+    <session_end>2025-08-28-10:18:01</session_end>
+    <source_ip_address>192.168.89.131</source_ip_address>
+    <source_port>42803</source_port>
+    <destination_ip_address>163.255.143.211</destination_ip_address>
+    <destination_port>80</destination_port>
+    <protocol_type>TCP</protocol_type>
+    <session_duration>168</session_duration>
+    <nat_address>143.119.99.225</nat_address>
+    <nat_port_number>53848</nat_port_number>
+    <network_device>BRAS-009</network_device>
+    <user_identifier>user0093</user_identifier>
+    <subscriber_identity>SUB100093</subscriber_identity>
+    <customer_name>Ayaan Das</customer_name>
+    <billing_address>17, JLN Marg, Bengaluru, India</billing_address>
+    <email_id>ayaan.das727@yahoo.com</email_id>
+    <subscriber_number>+919394731217</subscriber_number>
+    <alternate_number>+919394731715</alternate_number>
+    <customer_code>CUST200093</customer_code>
+    <ip_allocation_type>dynamic</ip_allocation_type>
+    <location_lat>12.9771</location_lat>
+    <location_lon>77.55787</location_lon>
+  </record>
+</ipdr_records>

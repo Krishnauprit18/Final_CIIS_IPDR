@@ -1,0 +1,26 @@
+# Example configuration for parsing IPDR logs.
+# Users should copy this to "config.yml" and customize it.
+
+# Define regex patterns to capture named groups from a log line.
+# The names (e.g., a_party, b_party) are used by the parser.
+patterns:
+  # Example for a CSV-like format: 1.2.3.4,192.168.1.5,9988776655,2025-08-29T10:00:00Z
+  - '(?P<a_party>[^,]+),(?P<b_party_ip>[^,]+),(?P<b_party_mobile>[^,]+),(?P<timestamp>[^,]+)'
+
+  # Example for a space-delimited format: src=1.2.3.4 dst=192.168.1.5 msisdn=9988776655
+  - 'src=(?P<a_party>\S+)\s+dst=(?P<b_party_ip>\S+)\s+msisdn=(?P<b_party_mobile>\S+)'
+
+# Define filters to exclude records.
+# Multiple filters can be added.
+filters:
+  # Exclude records where the B-Party IP is a private address.
+  - column: "b_party_ip"
+    type: "private_ip" # Special filter type
+
+# Optional IP allow/deny lists for public IP classification overrides
+# If an IP is in denylist, force it to non-public classification.
+# If an IP is in allowlist, force it to public classification.
+allowlist_ips:
+  - 203.0.113.50
+denylist_ips:
+  - 198.51.100.25
