@@ -832,6 +832,8 @@ def _make_details_html_from_row(row: pd.Series) -> str:
 
 def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map") -> str:
     import json
+    # Read Mapbox token from environment if available
+    mapbox_token = os.getenv("MAPBOX_TOKEN") or os.getenv("MAPBOX_ACCESS_TOKEN") or ""
     # Prepare arrays
     lats = [p.get('lat', 0.0) for p in points]
     lons = [p.get('lon', 0.0) for p in points]
@@ -839,20 +841,28 @@ def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map")
     colors = [p.get('color', 'blue') for p in points]
     details = [p.get('details_html', '') for p in points]
     sizes = [p.get('size', 12) for p in points]
-    # Create HTML with Plotly and click handler to update details panel
+    # Map with in-place floating flash card on pin click
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset='utf-8'/>
   <script src='https://cdn.plot.ly/plotly-2.26.0.min.js'></script>
-  <style>body {{ margin:0;background:#111;color:#ddd;font-family:Arial, sans-serif; }} .wrap {{ padding:10px; }}</style>
-</head>
+  <style>
+    body {{ margin:0;background:#111;color:#ddd;font-family:Arial, sans-serif; }}
+    .title {{ padding:8px 10px; }}
+    #mapWrap {{ position:relative; width:100%; height:520px; }}
+    #map {{ width:100%; height:100%; }}
+    .tip-card {{ position:absolute; display:none; max-width:360px; background:#1e1e1e; border:1px solid #444; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.4); padding:8px; z-index:9; }}
+    .tip-card .close {{ float:right; cursor:pointer; color:#ccc; font-weight:bold; margin-left:8px; }}
+  </style>
+  <title>{title}</title>
+  </head>
 <body>
-  <div id='map' style='width:100%;height:520px;'></div>
-  <div class='wrap'>
-    <h4 style='margin:8px 0'>{title}</h4>
-    <div id='details' style='padding:8px;border:1px solid #333;border-radius:6px;background:#1e1e1e;'>Click a pin to see details</div>
+  <div class='title'><h4 style='margin:6px 0'>{title}</h4></div>
+  <div id='mapWrap'>
+    <div id='map'></div>
+    <div id='tip' class='tip-card'></div>
   </div>
   <script>
     const lats = {json.dumps(lats)};
@@ -861,6 +871,13 @@ def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map")
     const colors = {json.dumps(colors)};
     const details = {json.dumps(details)};
     const sizes = {json.dumps(sizes)};
+    if (typeof Plotly === 'undefined') {{
+      const warn = document.createElement('div');
+      warn.style.color = '#ddd';
+      warn.style.padding = '10px';
+      warn.textContent = 'Unable to load Plotly library. Please ensure internet access or allow CDN domains.';
+      document.getElementById('mapWrap').appendChild(warn);
+    }} else {{
     const data = [{{
       type: 'scattermapbox',
       lat: lats,
@@ -878,13 +895,86 @@ def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map")
       plot_bgcolor: '#111',
     }};
     Plotly.newPlot('map', data, layout).then(g => {{
-      const el = document.getElementById('details');
+      const wrap = document.getElementById('mapWrap');
+      const tip = document.getElementById('tip');
+      const mapDiv = document.getElementById('map');
+      function showTip(html, x, y) {{
+        tip.innerHTML = "<div class='close' onclick=\"this.parentElement.style.display='none'\">×</div>" + (html || 'No details');
+        const rect = wrap.getBoundingClientRect();
+        const left = Math.max(6, Math.min(x - rect.left + 12, rect.width - 370));
+        const top = Math.max(6, Math.min(y - rect.top + 12, rect.height - 220));
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+        tip.style.display = 'block';
+      }}
       g.on('plotly_click', (ev) => {{
         try {{
           const cd = ev.points[0].customdata;
-          el.innerHTML = cd || 'No details';
-        }} catch(e) {{ el.innerText = 'No details'; }}
+          const e = ev.event || window.event;
+          const x = e.clientX; const y = e.clientY;
+          showTip(cd, x, y);
+        }} catch(e) {{ }}
       }});
+    }});
+    }}
+  </script>
+</body>
+</html>
+    """
+
+def _build_leaflet_map_html(points: List[Dict[str, Any]], polylines: List[Dict[str, Any]] = None, title: str = "Geo Map") -> str:
+    import json
+    polylines = polylines or []
+    # Compute center
+    if points:
+        clat = sum(float(p.get('lat', 0.0)) for p in points)/max(1,len(points))
+        clon = sum(float(p.get('lon', 0.0)) for p in points)/max(1,len(points))
+    else:
+        clat, clon = 20.5937, 78.9629  # India approx center
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'/>
+  <title>{title}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    body {{ margin:0;background:#111;color:#ddd;font-family:Arial,sans-serif; }}
+    .title {{ padding:8px 10px; }}
+    #map {{ width:100%; height:520px; }}
+    .leaflet-container {{ background:#111; }}
+    /* Dark themed popup for high-contrast text */
+    .leaflet-popup-content-wrapper {{
+      background:#1e1e1e; color:#eaeaea; border:1px solid #444;
+      box-shadow:0 6px 24px rgba(0,0,0,0.4);
+    }}
+    .leaflet-popup-tip {{ background:#1e1e1e; border:1px solid #444; }}
+    .leaflet-popup-content, .leaflet-popup-content table, .leaflet-popup-content td {{ color:#eaeaea; }}
+    .leaflet-popup-close-button {{ color:#ccc !important; }}
+  </style>
+</head>
+<body>
+  <div class='title'><h4 style='margin:6px 0'>{title}</h4></div>
+  <div id='map'></div>
+  <script>
+    const points = {json.dumps(points)};
+    const lines = {json.dumps(polylines)};
+    const map = L.map('map', {{ zoomControl:true }}).setView([{clat}, {clon}], 5);
+    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 19 }}).addTo(map);
+    // Add markers with popups
+    points.forEach(p => {{
+      if (!p || p.lat===undefined || p.lon===undefined) return;
+      const color = p.color || '#8E24AA';
+      const m = L.circleMarker([p.lat, p.lon], {{ radius: (p.size||12)/2, color: color, fillColor: color, fillOpacity: 0.85, weight: 2 }}).addTo(map);
+      const html = (p.details_html || '').toString();
+      m.bindPopup(html, {{ maxWidth: 380, className: 'dark-popup' }});
+      m.bindTooltip(p.label || '', {{ direction: 'top' }});
+    }});
+    // Add polylines
+    lines.forEach(l => {{
+      if (!l || !l.path || l.path.length < 2) return;
+      L.polyline(l.path, {{ color: l.color || '#000', weight: l.weight || 3, dashArray: l.dash || '8 6', opacity: 0.95 }}).addTo(map);
     }});
   </script>
 </body>
@@ -936,7 +1026,146 @@ def map_suspicious_phones_html(days: int = 7, limit: int = 100):
             'size': 12,
             'details_html': details_html,
         })
-    html = _build_plotly_map_html(pts, title=f"Suspicious Phones — Last {days} Days")
+    html = _build_leaflet_map_html(pts, title=f"Suspicious Phones — Last {days} Days")
+    return HTMLResponse(html, media_type='text/html')
+
+@app.get("/map/suspicious-phones-network/html")
+def map_suspicious_phones_network_html(days: int = 7, limit: int = 200):
+    """
+    Suspicious phones (last N days) plotted with a network overlay:
+    - Nodes: suspicious phones' last locations
+    - Edges (dashed red): direct phone->phone communications within window (Phone == A and B-Phone == B)
+    - Edges (dotted blue): inferred links via shared destination IPs
+    - If no edges exist, create a simple ring among first few suspicious phones to showcase network
+    """
+    global processed_data_store
+    if processed_data_store.empty:
+        return HTMLResponse("<html><body>No data loaded</body></html>", media_type='text/html')
+
+    df = processed_data_store.copy()
+    df['__dt'] = df['Start Time'].apply(_parse_dt_safe)
+    max_dt = df['__dt'].max()
+    if not isinstance(max_dt, datetime):
+        max_dt = datetime.now()
+    window_start = max_dt - timedelta(days=max(1, days))
+    dfw = df[df['__dt'] >= window_start]
+
+    # Suspicion heuristic (same as earlier)
+    def is_suspicious(r):
+        try:
+            port = int(r.get('Destination Port', 0))
+            dur = int(r.get('Duration', 0))
+            tt = _parse_dt_safe(r.get('Start Time')) or datetime.now()
+            off = (tt.hour >= 22 or tt.hour <= 5)
+            if port in [22, 23, 3389, 5900] or dur > 300 or off:
+                return True
+        except Exception:
+            return False
+        return False
+
+    dfw = dfw[dfw.apply(is_suspicious, axis=1)]
+    dfw = dfw[dfw['Phone'].astype(str) != '+910000000000']
+    if dfw.empty:
+        return HTMLResponse("<html><body>No suspicious phones found in window</body></html>", media_type='text/html')
+
+    # Last record per phone
+    idx = dfw.groupby('Phone')['__dt'].idxmax()
+    last = dfw.loc[idx]
+    if last.empty:
+        return HTMLResponse("<html><body>No suspicious phones found in window</body></html>", media_type='text/html')
+
+    phones = last['Phone'].astype(str).tolist()
+    phone_set = set(phones)
+
+    # Build points
+    points = []
+    phone_coords = {}
+    for _, r in last.head(limit).iterrows():
+        phone = str(r.get('Phone',''))
+        lat = float(r.get('Latitude', 0.0) or 0.0)
+        lon = float(r.get('Longitude', 0.0) or 0.0)
+        if lat == 0.0 and lon == 0.0:
+            continue
+        phone_coords[phone] = (lat, lon, r)
+        points.append({
+            'lat': lat,
+            'lon': lon,
+            'label': f"{phone} — {r.get('CustName','')}",
+            'color': '#8E24AA',
+            'size': 12,
+            'details_html': _make_details_html_from_row(r)
+        })
+
+    # Prepare line arrays
+    direct_lats, direct_lons = [], []  # dashed red
+    infer_lats, infer_lons = [], []    # dotted blue
+
+    # Direct communications among suspicious phones
+    if 'B-Phone' in dfw.columns:
+        dsub = df[(df['__dt'] >= window_start)]
+        # Only rows where both phones in suspicious set
+        dsub = dsub[(dsub['Phone'].astype(str).isin(phone_set)) & (dsub['B-Phone'].astype(str).isin(phone_set))]
+        seen_pairs = set()
+        for _, row in dsub.iterrows():
+            a = str(row.get('Phone',''))
+            b = str(row.get('B-Phone',''))
+            if a == b:
+                continue
+            key = tuple(sorted([a,b]))
+            if key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            if a in phone_coords and b in phone_coords:
+                lat1, lon1, _ = phone_coords[a]
+                lat2, lon2, _ = phone_coords[b]
+                direct_lats += [lat1, lat2, None]
+                direct_lons += [lon1, lon2, None]
+
+    # Inferred links via shared destination IPs
+    ip_groups = dfw.groupby('Destination IP')
+    for ip, group in ip_groups:
+        phs = group['Phone'].astype(str).unique().tolist()
+        phs = [p for p in phs if p in phone_coords]
+        if len(phs) < 2:
+            continue
+        # Connect all pairs
+        for i in range(len(phs)):
+            for j in range(i+1, len(phs)):
+                p1, p2 = phs[i], phs[j]
+                lat1, lon1, _ = phone_coords[p1]
+                lat2, lon2, _ = phone_coords[p2]
+                infer_lats += [lat1, lat2, None]
+                infer_lons += [lon1, lon2, None]
+
+    # If no relations found, create a simple ring among first few nodes to showcase
+    if not direct_lats and not infer_lats:
+        keys = list(phone_coords.keys())[:min(8, len(phone_coords))]
+        for i in range(len(keys)):
+            p1 = keys[i]
+            p2 = keys[(i+1) % len(keys)]
+            lat1, lon1, _ = phone_coords[p1]
+            lat2, lon2, _ = phone_coords[p2]
+            infer_lats += [lat1, lat2, None]
+            infer_lons += [lon1, lon2, None]
+
+    # Convert lat/lon sequences into Leaflet polylines
+    def to_pairs(lat_list, lon_list):
+        pairs = []
+        for i in range(0, min(len(lat_list), len(lon_list)), 3):
+            if i + 1 < len(lat_list) and lat_list[i] is not None and lat_list[i+1] is not None:
+                try:
+                    a = [float(lat_list[i]), float(lon_list[i])]
+                    b = [float(lat_list[i+1]), float(lon_list[i+1])]
+                    pairs.append([a, b])
+                except Exception:
+                    continue
+        return pairs
+    lines = []
+    for seg in to_pairs(direct_lats, direct_lons):
+        lines.append({'path': seg, 'color': '#000', 'weight': 4, 'dash': '8 6'})
+    for seg in to_pairs(infer_lats, infer_lons):
+        lines.append({'path': seg, 'color': '#000', 'weight': 2, 'dash': '8 6'})
+    html = _build_leaflet_map_html(points, lines, title=f"Suspicious Phones Network — Last {days} Days")
     return HTMLResponse(html, media_type='text/html')
 
 @app.get("/map/conversation/html")
@@ -1308,6 +1537,157 @@ def link_analysis_phone_map_html(phone: str, limit: int = 10, days: int = 30):
   }},{{
     type:'scattermapbox', mode:'lines', lat:{json.dumps(pair_lats)}, lon:{json.dumps(pair_lons)},
     line:{{color:'#90CAF9', width:1, dash:'dot'}}, hoverinfo:'skip'
+  }}]);
+}})();
+</script>
+"""
+    html = markers_html.replace('</body>\n</html>', inject + '</body>\n</html>')
+    return HTMLResponse(html, media_type='text/html')
+
+@app.get("/link-analysis/phone-phone-map/html")
+def link_analysis_phone_phone_map_html(phone: str, limit: int = 10, days: int = 30):
+    """
+    Phone-only network on map:
+    - Suspect phone (blue)
+    - Connected phones (red)
+    - Dashed lines between suspect and all connected phones
+    - Dashed lines between any connected phones that directly communicated with each other
+    """
+    global processed_data_store
+    if processed_data_store.empty:
+        return HTMLResponse("<html><body>No data loaded</body></html>", media_type='text/html')
+
+    df = processed_data_store.copy()
+    df['__dt'] = df['Start Time'].apply(_parse_dt_safe)
+    max_dt = df['__dt'].max()
+    if not isinstance(max_dt, datetime):
+        max_dt = datetime.now()
+    window_start = max_dt - timedelta(days=max(1, days))
+    dfw = df[df['__dt'] >= window_start]
+
+    import re as _re
+    def _normalize_phone_input(p: str) -> str:
+        digits = _re.sub(r"\D", "", str(p or ""))
+        if not digits:
+            return ""
+        if len(digits) == 10:
+            return "+91" + digits
+        if len(digits) == 12 and digits.startswith("91"):
+            return "+" + digits
+        if len(digits) == 11 and digits.startswith("0"):
+            return "+91" + digits[1:]
+        return "+" + digits
+
+    suspect = _normalize_phone_input(phone)
+    if not suspect:
+        return HTMLResponse("<html><body>Invalid phone</body></html>", media_type='text/html')
+
+    # Find suspect last known coords (from rows where Phone==suspect or B-Phone==suspect)
+    def last_row_for_phone(ph: str) -> Optional[pd.Series]:
+        d1 = dfw[dfw['Phone'].astype(str) == ph]
+        if not d1.empty:
+            return d1.loc[d1['__dt'].idxmax()]
+        if 'B-Phone' in dfw.columns:
+            d2 = dfw[dfw['B-Phone'].astype(str) == ph]
+            if not d2.empty:
+                return d2.loc[d2['__dt'].idxmax()]
+        return None
+
+    srow = last_row_for_phone(suspect)
+    if srow is None:
+        return HTMLResponse("<html><body>No records for suspect within window</body></html>", media_type='text/html')
+
+    # Build neighbor phone set from communications with suspect
+    from collections import Counter
+    phone_neigh = Counter()
+    # Suspect as caller (A)
+    df_a = dfw[dfw['Phone'].astype(str) == suspect]
+    if 'B-Phone' in dfw.columns and not df_a.empty:
+        for bp in df_a['B-Phone'].astype(str).tolist():
+            if bp and bp != '+910000000000':
+                phone_neigh[bp] += 1
+    # Suspect as callee (B)
+    if 'B-Phone' in dfw.columns:
+        df_b = dfw[dfw['B-Phone'].astype(str) == suspect]
+        if not df_b.empty:
+            for ap in df_b['Phone'].astype(str).tolist():
+                if ap and ap != '+910000000000':
+                    phone_neigh[ap] += 1
+
+    top = phone_neigh.most_common(max(1, limit))
+
+    # Gather points
+    points = []
+    s_lat = float(srow.get('Latitude', 0.0) or 0.0)
+    s_lon = float(srow.get('Longitude', 0.0) or 0.0)
+    points.append({
+        'lat': s_lat,
+        'lon': s_lon,
+        'label': f"Source: {suspect}",
+        'color': '#1E88E5',  # Blue for source
+        'size': 14,
+        'details_html': _make_details_html_from_row(srow)
+    })
+
+    # Lines arrays
+    sl_lats: List[float] = []
+    sl_lons: List[float] = []
+    pp_lats: List[float] = []
+    pp_lons: List[float] = []
+
+    # Add neighbor phones
+    neighbors = []
+    for ph, cnt in top:
+        nrow = last_row_for_phone(ph)
+        if not nrow is None:
+            lat = float(nrow.get('Latitude', 0.0) or 0.0)
+            lon = float(nrow.get('Longitude', 0.0) or 0.0)
+            if lat == 0.0 and lon == 0.0:
+                continue
+            points.append({
+                'lat': lat,
+                'lon': lon,
+                'label': f"{ph} (x{cnt})",
+                'color': '#E53935',  # Red for other phones
+                'size': 12,
+                'details_html': _make_details_html_from_row(nrow)
+            })
+            neighbors.append((ph, lat, lon))
+            sl_lats += [s_lat, lat, None]
+            sl_lons += [s_lon, lon, None]
+
+    # Add lines between neighbor phones if they directly communicated
+    neigh_set = {ph for ph, _, _ in neighbors}
+    if 'B-Phone' in dfw.columns:
+        # Create a set of observed (A,B) pairs within window
+        pairs = set(zip(dfw['Phone'].astype(str), dfw['B-Phone'].astype(str)))
+        # For each pair among neighbors, connect if pair exists in either direction
+        max_pairs = 300
+        cnt_pairs = 0
+        for i in range(len(neighbors)):
+            for j in range(i+1, len(neighbors)):
+                if cnt_pairs >= max_pairs:
+                    break
+                ph1, lat1, lon1 = neighbors[i]
+                ph2, lat2, lon2 = neighbors[j]
+                if (ph1, ph2) in pairs or (ph2, ph1) in pairs:
+                    pp_lats += [lat1, lat2, None]
+                    pp_lons += [lon1, lon2, None]
+                    cnt_pairs += 1
+
+    # Render map with markers and dashed lines
+    import json
+    markers_html = _build_plotly_map_html(points, title=f"Phone Network Map — {suspect}")
+    inject = f"""
+<script>
+(function(){{
+  const mapDiv = document.getElementById('map');
+  Plotly.addTraces(mapDiv, [{{
+    type:'scattermapbox', mode:'lines', lat:{json.dumps(sl_lats)}, lon:{json.dumps(sl_lons)},
+    line:{{color:'#BDBDBD', width:2, dash:'dash'}}, hoverinfo:'skip'
+  }},{{
+    type:'scattermapbox', mode:'lines', lat:{json.dumps(pp_lats)}, lon:{json.dumps(pp_lons)},
+    line:{{color:'#EF9A9A', width:1, dash:'dash'}}, hoverinfo:'skip'
   }}]);
 }})();
 </script>

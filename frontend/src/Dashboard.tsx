@@ -138,11 +138,7 @@ const Dashboard: React.FC = () => {
     const [convMapSrc, setConvMapSrc] = useState<string>('');
     const [convA, setConvA] = useState<string>('');
     const [convB, setConvB] = useState<string>('');
-    // Link Analysis
-    const [laPhone, setLaPhone] = useState<string>('');
-    const [laNodes, setLaNodes] = useState<{id:string,label:string,group?:string}[]>([]);
-    const [laEdges, setLaEdges] = useState<{from:string,to:string,value?:number}[]>([]);
-    const [laMapSrc, setLaMapSrc] = useState<string>('');
+    // Link Analysis removed (map rendered within Suspicious Phones section)
     
     // Profile state
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1275,12 +1271,12 @@ const Dashboard: React.FC = () => {
                                     <Paper variant="outlined" sx={{ p: 2 }}>
                                         <Typography variant="subtitle1" gutterBottom>Suspicious Phones — Last 7 Days</Typography>
                                         <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                                            <Button size="small" variant="outlined" onClick={()=> setSuspMapSrc(`${API_URL}/map/suspicious-phones/html?days=7`)}>Refresh</Button>
+                                            <Button size="small" variant="outlined" onClick={()=> setSuspMapSrc(`${API_URL}/map/suspicious-phones/html?days=7`)}>REFRESH</Button>
                                         </Box>
                                         {suspMapSrc ? (
                                             <iframe title="suspicious-map" src={suspMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />
                                         ) : (
-                                            <Typography color="textSecondary">Click Refresh to load map.</Typography>
+                                            <Typography color="textSecondary">Click REFRESH to load map.</Typography>
                                         )}
                                     </Paper>
 
@@ -1309,77 +1305,7 @@ const Dashboard: React.FC = () => {
                                         )}
                                     </Paper>
 
-                                    <Paper variant="outlined" sx={{ p: 2 }}>
-                                        <Typography variant="subtitle1" gutterBottom>Link Analysis (Top 10 connections)</Typography>
-                                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 1, flexWrap: 'wrap' }}>
-                                            <TextField size="small" label="Suspect Phone" value={laPhone} onChange={(e)=>setLaPhone(e.target.value.replace(/[^0-9]/g, ''))} inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }} helperText="Enter 10 or 12 digits (no +)" />
-                                            <Button size="small" variant="contained" onClick={async ()=>{
-                                                const toE164 = (p: string) => {
-                                                    const d = (p||'').replace(/[^0-9]/g,'');
-                                                    if (d.length===10) return `+91${d}`;
-                                                    if (d.length===12 && d.startsWith('91')) return `+${d}`;
-                                                    if (d.length===11 && d.startsWith('0')) return `+91${d.slice(1)}`;
-                                                    return d ? `+${d}` : '';
-                                                };
-                                                const phone = toE164(laPhone);
-                                                if (!phone) return;
-                                                try {
-                                                    // Use trailing slash to avoid proxy/strict router 404s
-                                                    const res = await axios.get(`${API_URL}/link-analysis/phone/`, { params: { phone, limit: 10 } });
-                                                    setLaNodes(res.data?.nodes || []);
-                                                    setLaEdges(res.data?.edges || []);
-                                                } catch (e) { setLaNodes([]); setLaEdges([]); }
-                                            }} disabled={!laPhone}>BUILD</Button>
-                                        </Box>
-                                        <Paper variant="outlined" sx={{ p: 1 }}>
-                                            {laNodes.length>0 ? (
-                                                <Graph
-                                                    key={`la-${laNodes.length}-${laEdges.length}`}
-                                                    graph={{
-                                                        nodes: Array.from(new Map(laNodes.map(n=>[n.id,n])).values()).map(n=>({
-                                                            id: n.id,
-                                                            label: n.label,
-                                                            color: n.group==='suspect' ? { background:'#4CAF50', border:'#2E7D32' } : (n.id.startsWith('phone:') ? { background:'#66BB6A', border:'#388E3C' } : { background:'#42A5F5', border:'#1E88E5' }),
-                                                            font: { color:'white' },
-                                                            shape: n.id.startsWith('phone:') ? 'circle' : 'box'
-                                                        })),
-                                                        edges: Array.from(new Set(laEdges.map(e=>`${e.from}->${e.to}`))).map((k,idx)=>{
-                                                            const [f,t]=k.split('->');
-                                                            const found = laEdges.find(e=>e.from===f && e.to===t);
-                                                            return { id:`lae-${idx}`, from:f, to:t, value:found?.value, color:{ color:'#BDBDBD' } };
-                                                        })
-                                                    }}
-                                                    options={{
-                                                        layout: { hierarchical: { enabled:false } },
-                                                        physics: { enabled:true, stabilization:{ iterations:200 } },
-                                                        nodes: { borderWidth:2, font:{ color:'white' } },
-                                                        height: '480px'
-                                                    }}
-                                                />
-                                            ) : (
-                                                <Typography color="textSecondary">Enter suspect phone and click BUILD to see top connections.</Typography>
-                                            )}
-                                        </Paper>
-                                        <Box sx={{ display:'flex', gap:1, mt:1 }}>
-                                            <Button size="small" variant="outlined" onClick={()=>{
-                                                const toE164 = (p: string) => {
-                                                    const d = (p||'').replace(/[^0-9]/g,'');
-                                                    if (d.length===10) return `+91${d}`;
-                                                    if (d.length===12 && d.startsWith('91')) return `+${d}`;
-                                                    if (d.length===11 && d.startsWith('0')) return `+91${d.slice(1)}`;
-                                                    return d ? `+${d}` : '';
-                                                };
-                                                const phone = toE164(laPhone);
-                                                if (!phone) return;
-                                                setLaMapSrc(`${API_URL}/link-analysis/phone-map/html?phone=${encodeURIComponent(phone)}&limit=10&days=30`);
-                                            }} disabled={!laPhone}>Show on Map</Button>
-                                        </Box>
-                                        {laMapSrc && (
-                                            <Box sx={{ mt:1 }}>
-                                                <iframe title="link-analysis-map" src={laMapSrc} style={{ width:'100%', height: 420, border:0, borderRadius:6 }} />
-                                            </Box>
-                                        )}
-                                    </Paper>
+                                    {/* Link Analysis section removed as per requirements */}
                                 </Box>
                             </Box>
                         )}
