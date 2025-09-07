@@ -27,4 +27,11 @@
   transform: rotate(45deg);
   border-radius: 24px;
   pointer-events: none;
+  z-index: 0; /* keep decoration behind content */
+}
+
+/* Ensure the project logo (and other content) stays visibly on top */
+.project-logo {
+  position: relative;
+  z-index: 1;
 }

@@ -100,7 +100,7 @@ function App() {
             <CssBaseline />
             {user ? (
                 <Box>
-                    <AppBar position="static">
+                    <AppBar position="static" sx={{ width: { md: 'calc(100% - 220px)' }, ml: { md: '220px' } }}>
                         <Toolbar>
                             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                                 IPDR Analysis Dashboard

@@ -100,12 +100,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
 
                         <Divider sx={{ my: 2 }} />
 
-                        {/* Project logo placeholder strip */}
-                        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, width: '60%', height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', fontSize: 12 }}>
-                                Project Logo Area
-                            </Box>
-                        </Box>
+                        {/* Project logo area */}
+                        <ProjectLogo />
 
                         <form onSubmit={handleSubmit}>
                             <TextField
@@ -221,3 +217,36 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
 };
 
 export default Login;
+// Inline component to render project logo in login page with multiple fallbacks
+const ProjectLogo: React.FC = () => {
+    const candidates = ['/logo.jpg', '/logo.jpeg', '/logo.png', '/assets/logo.jpg', '/assets/logo.jpeg', '/assets/logo.png'];
+    const [idx, setIdx] = useState(0);
+    const [loaded, setLoaded] = useState(false);
+    const src = candidates[Math.min(idx, candidates.length - 1)];
+    const next = () => setIdx((i) => (i + 1 < candidates.length ? i + 1 : i));
+    return (
+        <Box className="project-logo" sx={{ mb: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {!loaded && (
+                <Box sx={{
+                    border: '1px dashed', borderColor: 'divider', borderRadius: 1,
+                    width: '80%', height: 96, maxWidth: 360,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'text.secondary', fontSize: 12
+                }}>
+                    Project Logo Area
+                </Box>
+            )}
+            <img
+                src={src}
+                alt="Project Logo"
+                onLoad={() => setLoaded(true)}
+                onError={() => next()}
+                style={{
+                    display: loaded ? 'block' : 'none',
+                    width: '80%', height: 96, maxWidth: 360,
+                    objectFit: 'contain'
+                }}
+            />
+        </Box>
+    );
+};

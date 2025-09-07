@@ -12,3 +12,4 @@ plotly
 kaleido
 scikit-learn
 scipy
+requests

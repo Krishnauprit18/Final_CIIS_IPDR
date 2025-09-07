@@ -131,6 +131,7 @@ const Dashboard: React.FC = () => {
     const [datasetFile, setDatasetFile] = useState<File | null>(null);
     const [llmPrompt, setLlmPrompt] = useState<string>('');
     const [caseAnalysisMsg, setCaseAnalysisMsg] = useState<string>('');
+    const [llmSummary, setLlmSummary] = useState<string>('');
     // Enrichment
     const [ipLookup, setIpLookup] = useState('');
     const [ipEnrichment, setIpEnrichment] = useState<any | null>(null);
@@ -489,6 +490,18 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    const generateCaseSummary = async () => {
+        if (!selectedCaseId) { setCaseAnalysisMsg('Select a case first.'); return; }
+        try {
+            setCaseAnalysisMsg('Generating AI summary...');
+            const res = await axios.post(`${API_URL}/cases/${selectedCaseId}/ai-summary`);
+            setLlmSummary(res.data?.report_text || '');
+            setCaseAnalysisMsg('AI summary ready.');
+        } catch (e:any) {
+            setCaseAnalysisMsg(e?.response?.data?.detail || 'Failed to generate summary');
+        }
+    };
+
     // Enrichment
     const enrichIp = async (ip: string) => {
         if (!ip) return;
@@ -614,6 +627,7 @@ const Dashboard: React.FC = () => {
                 sx={{
                     width: drawerWidth,
                     flexShrink: 0,
+                    display: { xs: 'none', md: 'block' },
                     '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', p: 1.5 },
                 }}
             >
@@ -723,7 +737,7 @@ const Dashboard: React.FC = () => {
             </Drawer>
 
             {/* Main content */}
-            <Box component="main" sx={{ flexGrow: 1, ml: `${drawerWidth}px`, px: 2, maxWidth: '100%' }}>
+            <Box component="main" sx={{ flexGrow: 1, ml: { xs: 0, md: `${drawerWidth}px` }, px: { xs: 1, md: 2 }, maxWidth: '100%' }}>
             <Box sx={{ my: 4 }}>
                 <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                     <Security sx={{ mr: 2, color: 'primary.main' }} />
@@ -1200,8 +1214,16 @@ const Dashboard: React.FC = () => {
                                     <Typography variant="caption">{datasetFile?.name || 'No file selected'}</Typography>
                                 </Box>
                                 <TextField fullWidth multiline minRows={2} label="LLM Prompt (optional)" value={llmPrompt} onChange={(e)=>setLlmPrompt(e.target.value)} sx={{ mb: 1 }} />
-                                <Button variant="contained" size="small" onClick={runCaseAnalysis} disabled={!selectedCaseId}>Run AI Analysis</Button>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                    <Button variant="contained" size="small" onClick={runCaseAnalysis} disabled={!selectedCaseId}>Run AI Analysis</Button>
+                                    <Button variant="outlined" size="small" onClick={generateCaseSummary} disabled={!selectedCaseId}>Generate AI Summary</Button>
+                                </Box>
                                 {caseAnalysisMsg && (<Typography variant="body2" sx={{ mt: 1 }}>{caseAnalysisMsg}</Typography>)}
+                                {llmSummary && (
+                                    <Paper variant="outlined" sx={{ p: 2, mt: 1, maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 12 }}>
+                                        {llmSummary}
+                                    </Paper>
+                                )}
 
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
                                     <TextField size="small" fullWidth label="Notes (optional)" value={saveNotes} onChange={(e)=>setSaveNotes(e.target.value)} />
