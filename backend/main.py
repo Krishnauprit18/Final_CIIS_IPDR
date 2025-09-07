@@ -964,28 +964,22 @@ def _build_leaflet_map_html(points: List[Dict[str, Any]], polylines: List[Dict[s
     const lines = {json.dumps(polylines)};
     const map = L.map('map', {{ zoomControl:true }}).setView([{clat}, {clon}], 5);
     L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ maxZoom: 19 }}).addTo(map);
-    // Add markers with popups
+    // Add markers with popups (use visible dot markers for all points)
     points.forEach(p => {{
       if (!p || p.lat===undefined || p.lon===undefined) return;
       const color = p.color || '#8E24AA';
       const size = (p.size||12);
+      const r = Math.max(4, Math.floor(size/2));
       const popupHtml = (p.details_html || '').toString();
-      if (p.icon === 'flag' || p.icon === 'pin') {{
-        const char = p.icon === 'flag' ? '🚩' : '📍';
-        const icon = L.divIcon({{
-          className: 'div-emoji-icon',
-          html: `<div style='font-size:\${{Math.max(14, size)}}px; line-height:1;'>\${{char}}</div>`,
-          iconSize: [size, size],
-          iconAnchor: [size/2, size]
-        }});
-        const m = L.marker([p.lat, p.lon], {{ icon }}).addTo(map);
-        m.bindPopup(popupHtml, {{ maxWidth: 380, className: 'dark-popup' }});
-        m.bindTooltip(p.label || '', {{ direction: 'top' }});
-      }} else {{
-        const m = L.circleMarker([p.lat, p.lon], {{ radius: size/2, color: color, fillColor: color, fillOpacity: 0.85, weight: 2 }}).addTo(map);
-        m.bindPopup(popupHtml, {{ maxWidth: 380, className: 'dark-popup' }});
-        m.bindTooltip(p.label || '', {{ direction: 'top' }});
-      }}
+      const m = L.circleMarker([p.lat, p.lon], {{
+        radius: r,
+        color: '#ffffff',        // bright border for visibility on dark map
+        weight: 2,
+        fillColor: color,        // inner fill shows type (phone/police)
+        fillOpacity: 0.95
+      }}).addTo(map);
+      m.bindPopup(popupHtml, {{ maxWidth: 380, className: 'dark-popup' }});
+      m.bindTooltip(p.label || '', {{ direction: 'top' }});
     }});
     // Add polylines
     lines.forEach(l => {{
