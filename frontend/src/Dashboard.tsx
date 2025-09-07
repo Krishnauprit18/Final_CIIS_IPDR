@@ -1271,7 +1271,8 @@ const Dashboard: React.FC = () => {
                                     <Paper variant="outlined" sx={{ p: 2 }}>
                                         <Typography variant="subtitle1" gutterBottom>Suspicious Phones — Last 7 Days</Typography>
                                         <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                                            <Button size="small" variant="outlined" onClick={()=> setSuspMapSrc(`${API_URL}/map/suspicious-phones/html?days=7`)}>REFRESH</Button>
+                                            {/* Use network-enabled map to visualize relationships with dashed lines */}
+                                            <Button size="small" variant="outlined" onClick={()=> setSuspMapSrc(`${API_URL}/map/suspicious-phones-network/html?days=7`)}>REFRESH</Button>
                                         </Box>
                                         {suspMapSrc ? (
                                             <iframe title="suspicious-map" src={suspMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />

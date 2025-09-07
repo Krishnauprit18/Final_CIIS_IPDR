@@ -1161,10 +1161,12 @@ def map_suspicious_phones_network_html(days: int = 7, limit: int = 200):
                     continue
         return pairs
     lines = []
+    # Direct phone-to-phone links: dashed red, heavier stroke
     for seg in to_pairs(direct_lats, direct_lons):
-        lines.append({'path': seg, 'color': '#000', 'weight': 4, 'dash': '8 6'})
+        lines.append({'path': seg, 'color': '#E53935', 'weight': 3, 'dash': '10 6'})
+    # Inferred links via shared destination IPs: dotted/short-dash blue, lighter stroke
     for seg in to_pairs(infer_lats, infer_lons):
-        lines.append({'path': seg, 'color': '#000', 'weight': 2, 'dash': '8 6'})
+        lines.append({'path': seg, 'color': '#1E88E5', 'weight': 2, 'dash': '4 6'})
     html = _build_leaflet_map_html(points, lines, title=f"Suspicious Phones Network — Last {days} Days")
     return HTMLResponse(html, media_type='text/html')
 
