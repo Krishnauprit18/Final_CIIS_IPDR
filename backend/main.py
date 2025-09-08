@@ -16,6 +16,23 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel
 
+def _load_env_file(path: str) -> None:
+    """Minimal .env loader: KEY=VALUE lines, ignores comments/blank lines."""
+    try:
+        if not os.path.exists(path):
+            return
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                # Do not override existing env if already set
+                os.environ.setdefault(k.strip(), v.strip())
+    except Exception:
+        # silently ignore .env loader failures
+        pass
+
 # Assuming parser.py will contain the core parsing logic
 from parser import parse_log_data
 from relationship_extractor import RelationshipExtractor
@@ -196,146 +213,7 @@ DENYLIST_IPS: set = set()
 # Enrichment removed: no enricher instance
 CASE_ANALYSES: Dict[int, Dict[str, Any]] = {}
 
-# --- LLM/Gemini helpers (integration point) ---
-def _load_env_file(path: str) -> None:
-    """Minimal .env loader: KEY=VALUE lines, ignores comments/blank lines."""
-    try:
-        if not os.path.exists(path):
-            return
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith('#') or '=' not in line:
-                    continue
-                k, v = line.split('=', 1)
-                # Do not override existing env if already set
-                os.environ.setdefault(k.strip(), v.strip())
-    except Exception:
-        # silently ignore .env loader failures
-        pass
-def _read_case_file_text(path: str, max_chars: int = 20000) -> str:
-    """Lightweight text extraction from case doc. Supports .txt and basic .docx via zip xml."""
-    try:
-        if not os.path.exists(path):
-            return ""
-        lower = path.lower()
-        if lower.endswith('.txt'):
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                return f.read(max_chars)
-        if lower.endswith('.docx'):
-            import zipfile, re
-            with zipfile.ZipFile(path) as z:
-                with z.open('word/document.xml') as docxml:
-                    raw = docxml.read().decode('utf-8', 'ignore')
-                    txt = re.sub(r'<[^>]+>', ' ', raw)
-                    return txt[:max_chars]
-        # Fallback: try to read as text
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            return f.read(max_chars)
-    except Exception:
-        return ""
 
-def _summarize_df_for_llm(df: pd.DataFrame, top_n: int = 10) -> Dict[str, Any]:
-    """Compute compact stats for LLM prompt to avoid sending whole dataset."""
-    out: Dict[str, Any] = {}
-    try:
-        out['rows'] = int(len(df))
-        out['time_range'] = {
-            'start': str(pd.to_datetime(df['Start Time'], errors='coerce').min()),
-            'end': str(pd.to_datetime(df['Start Time'], errors='coerce').max()),
-        }
-    except Exception:
-        pass
-    def top_vals(series: pd.Series) -> Dict[str, int]:
-        try:
-            vc = series.dropna().astype(str).value_counts().head(top_n)
-            return {str(k): int(v) for k, v in vc.to_dict().items()}
-        except Exception:
-            return {}
-    out['protocols'] = top_vals(df.get('Protocol', pd.Series([], dtype=object)))
-    out['dest_ports'] = top_vals(df.get('Destination Port', pd.Series([], dtype=object)))
-    out['dest_ips'] = top_vals(df.get('Destination IP', pd.Series([], dtype=object)))
-    out['phones'] = top_vals(df.get('Phone', pd.Series([], dtype=object)))
-    out['b_phones'] = top_vals(df.get('B-Phone', pd.Series([], dtype=object))) if 'B-Phone' in df.columns else {}
-    try:
-        det = SuspiciousActivityDetector(df)
-        alerts = det.run_comprehensive_analysis()
-        out['alert_counts'] = {k: (len(v) if isinstance(v, list) else 0) for k, v in alerts.items()}
-    except Exception:
-        out['alert_counts'] = {}
-    try:
-        rex = RelationshipExtractor(df)
-        out['bparty_ip_top'] = dict(sorted({k: v.get('total_connections', 0) for k, v in rex.get_b_party_summary().items()}.items(), key=lambda x: x[1], reverse=True)[:top_n])
-        if 'B-Phone' in df.columns:
-            out['bparty_phone_top'] = dict(sorted({k: v.get('total_connections', 0) for k, v in rex.get_b_party_phone_summary().items()}.items(), key=lambda x: x[1], reverse=True)[:top_n])
-    except Exception:
-        pass
-    return out
-
-def _build_gemini_prompt(case_text: str, data_stats: Dict[str, Any]) -> str:
-    return (
-        "You are an expert digital forensics analyst assisting law enforcement.\n"
-        "You are given: (1) A case brief (plain text). (2) IPDR communication statistics derived from logs.\n"
-        "Task: Produce a concise, investigation-ready summary highlighting potential illegal practices, key actors,\n"
-        "A-party to B-party mapping signals, suspicious infrastructure (public IPs/ports), and recommended actions.\n\n"
-        "Rules:\n"
-        "- Base your findings strictly on the case brief and the provided statistics.\n"
-        "- Do not fabricate data; if insufficient, say so explicitly.\n"
-        "- Prefer bullets; keep it crisp and operational.\n"
-        "- Include clear reasoning and indicators (e.g., late-night volume, high-risk ports, repeated destinations).\n"
-        "- Provide a short risk rating (LOW/MEDIUM/HIGH).\n\n"
-        "Output sections (plain text):\n"
-        "1) Executive Summary\n2) Key Entities (phones, subscribers, B-party IPs/phones)\n3) Suspicious Indicators (with counts)\n4) A->B Mapping Highlights (top pairs/paths)\n5) Hypothesized Illegal Practices (why)\n6) Recommended Actions (queries, warrants, preservation, outreach)\n7) Risk Rating\n\n"
-        f"Case Brief (truncated):\n{case_text[:4000]}\n\n"
-        f"IPDR Statistics (JSON):\n{json.dumps(data_stats, ensure_ascii=False)}\n\n"
-        "Now produce the report."
-    )
-
-def _call_gemini_generate(prompt: str) -> Optional[str]:
-    api_key = os.getenv('GEMINI_API_KEY')
-    if not api_key:
-        return None
-    try:
-        import requests
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={api_key}"
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        headers = {"Content-Type": "application/json"}
-        resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
-        if resp.status_code >= 400:
-            return f"[LLM error {resp.status_code}] {resp.text[:500]}"
-        data = resp.json()
-        try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception:
-            return json.dumps(data)[:4000]
-    except Exception as e:
-        return f"[LLM exception] {str(e)}"
-
-def _call_ollama_generate(prompt: str) -> Optional[str]:
-    """Call a local Ollama server to generate text.
-    Env:
-      - OLLAMA_BASE_URL (default http://localhost:11434)
-      - OLLAMA_MODEL (default llama3:8b)
-    """
-    base = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434').rstrip('/')
-    model = os.getenv('OLLAMA_MODEL', 'llama3:8b')
-    try:
-        import requests
-        url = f"{base}/api/generate"
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-        }
-        resp = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(payload), timeout=120)
-        if resp.status_code >= 400:
-            return f"[OLLAMA error {resp.status_code}] {resp.text[:500]}"
-        data = resp.json()
-        # Non-stream response contains a single JSON with 'response'
-        txt = data.get('response') or ''
-        return txt
-    except Exception as e:
-        return f"[OLLAMA exception] {str(e)}"
 
 # --- Authentication ---
 security = HTTPBearer()
@@ -524,7 +402,6 @@ def startup_event():
                 DENYLIST_IPS = set(map(str, deny or []))
         except Exception:
             ALLOWLIST_IPS.clear(); DENYLIST_IPS.clear()
-    # Enrichment removed: no enricher init
 
 @app.get("/")
 def read_root():
@@ -1315,100 +1192,18 @@ def map_suspicious_phones_network_html(days: int = 7, limit: int = 200):
     html = _build_leaflet_map_html(points, lines, title=f"Suspicious Phones Network — Last {days} Days")
     return HTMLResponse(html, media_type='text/html')
 
-@app.get("/map/conversation/html")
-def map_conversation_html(phone_a: str, phone_b: str, days: int = 7):
-    """Plot two people's last known locations with roles and categories."""
-    global processed_data_store
-    if processed_data_store.empty:
-        return HTMLResponse("<html><body>No data loaded</body></html>", media_type='text/html')
-    df = processed_data_store.copy()
-    df['__dt'] = df['Start Time'].apply(_parse_dt_safe)
-    max_dt = df['__dt'].max()
-    if not isinstance(max_dt, datetime):
-        max_dt = datetime.now()
-    window_start = max_dt - timedelta(days=max(1, days))
-    dfw = df[df['__dt'] >= window_start]
 
-    # Normalize input to E.164 (+91) to match normalized dataset
-    import re as _re
-    def _normalize_phone_input(p: str) -> str:
-        digits = _re.sub(r"\D", "", str(p or ""))
-        if not digits:
-            return ""
-        # Handle 10-digit local
-        if len(digits) == 10:
-            return "+91" + digits
-        # Handle 12-digit starting with 91
-        if len(digits) == 12 and digits.startswith("91"):
-            return "+" + digits
-        # Handle trunk '0' prefix 11-digit
-        if len(digits) == 11 and digits.startswith("0"):
-            return "+91" + digits[1:]
-        # Fallback
-        return "+" + digits
-
-    def last_record_for_phone(pn: str) -> Optional[pd.Series]:
-        pn_norm = _normalize_phone_input(pn)
-        d = dfw[dfw['Phone'].astype(str) == pn_norm]
-        if d.empty:
-            return None
-        return d.loc[d['__dt'].idxmax()]
-
-    arow = last_record_for_phone(phone_a)
-    brow = last_record_for_phone(phone_b)
-    if arow is None and brow is None:
-        return HTMLResponse("<html><body>No records for given phones in window</body></html>", media_type='text/html')
-
-    def categorize(r: Optional[pd.Series]) -> str:
-        if r is None:
-            return 'unknown'
-        try:
-            port = int(r.get('Destination Port', 0))
-            dur = int(r.get('Duration', 0))
-            tt = _parse_dt_safe(r.get('Start Time')) or datetime.now()
-            off = (tt.hour >= 22 or tt.hour <= 5)
-            if port in [22,23,3389,5900] or dur > 300 or off:
-                return 'suspicious'
-        except Exception:
-            pass
-        return 'genuine'
-
-    cat_a = categorize(arow)
-    cat_b = categorize(brow)
-
-    pts = []
-    if arow is not None:
-        pts.append({
-            'lat': float(arow.get('Latitude', 0.0) or 0.0),
-            'lon': float(arow.get('Longitude', 0.0) or 0.0),
-            'label': f"A (caller): {arow.get('Phone','')} — {arow.get('CustName','')}",
-            'color': '#E53935' if cat_a=='suspicious' else '#F44336',  # red shades
-            'size': 14,
-            'details_html': _make_details_html_from_row(arow),
-        })
-    if brow is not None:
-        pts.append({
-            'lat': float(brow.get('Latitude', 0.0) or 0.0),
-            'lon': float(brow.get('Longitude', 0.0) or 0.0),
-            'label': f"B (callee): {brow.get('Phone','')} → {brow.get('B-Phone','')}",
-            'color': '#FB8C00' if cat_b=='suspicious' else '#FFA726',  # orange shades
-            'size': 14,
-            'details_html': _make_details_html_from_row(brow),
-        })
-
-    html = _build_plotly_map_html(pts, title=f"Conversation Map — A: {phone_a} vs B: {phone_b} ({cat_a} / {cat_b})")
-    return HTMLResponse(html, media_type='text/html')
 
 # =============================
 # CASE AI ANALYSIS + MAP VIEW
 # =============================
 
 @app.post("/cases/{case_id}/ai-analyze")
-async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), dataset_file: UploadFile = File(...), llm_prompt: Optional[str] = None, provider: str = "auto", chunksize: Optional[int] = None):
+async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), dataset_file: UploadFile = File(...), chunksize: Optional[int] = None):
     """
     Accept a case document and a raw IPDR dataset, run analysis (A->B mapping, suspicious detection),
-    and store results under the given case_id for visualization. This simulates LLM-assisted analysis
-    by leveraging local analytics modules (normalizer, relationship extractor, suspicious detector).
+    and store results under the given case_id for visualization. This leverages local analytics 
+    modules (normalizer, relationship extractor, suspicious detector).
     """
     if not case_file.filename or not dataset_file.filename:
         raise HTTPException(status_code=400, detail="Both case_file and dataset_file are required")
@@ -1423,7 +1218,7 @@ async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), datas
             shutil.copyfileobj(dataset_file.file, df)
 
         # Normalize and analyze dataset
-        df = data_normalizer.normalize_file(data_path, provider=provider, chunksize=chunksize)
+        df = data_normalizer.normalize_file(data_path, chunksize=chunksize)
         if df.empty:
             CASE_ANALYSES.pop(case_id, None)
             raise HTTPException(status_code=400, detail="Uploaded dataset produced no records after normalization")
@@ -1431,11 +1226,8 @@ async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), datas
         CASE_ANALYSES[case_id] = {
             "df": df,
             "last_updated": datetime.now().isoformat(),
-            "llm_prompt": llm_prompt or "",
-            "provider": provider,
             "rows": len(df),
             "case_doc_path": case_path,
-            "llm_report": None,
         }
         # Clean temp dataset file; keep case doc
         try:
@@ -1632,59 +1424,7 @@ def map_case_network_html(case_id: int, days: int = 7, limit: int = 200):
     html = _build_leaflet_map_html(points, lines, title=f"Case {case_id} — AI Network Map (Last {days} Days)")
     return HTMLResponse(html, media_type='text/html')
 
-@app.post("/cases/{case_id}/ai-summary")
-def ai_generate_case_summary(case_id: int, force: bool = False):
-    """
-    Build a compact stats object from the stored case analysis and call Gemini (if GEMINI_API_KEY set)
-    to generate an investigation-ready summary report. Stores report in CASE_ANALYSES and returns it.
-    """
-    if case_id not in CASE_ANALYSES:
-        raise HTTPException(status_code=404, detail="Case not found or not analyzed yet")
-    entry = CASE_ANALYSES[case_id]
-    df: pd.DataFrame = entry.get("df")
-    if df is None or df.empty:
-        raise HTTPException(status_code=400, detail="No data in case analysis")
 
-    # If we already have a summary and not forcing regeneration, reuse it
-    cached = entry.get("llm_report")
-    if cached and not force:
-        return {"case_id": case_id, "report_text": cached, "provider": entry.get("llm_provider", "cached")}
-
-    # Prepare inputs
-    case_text = _read_case_file_text(entry.get("case_doc_path", ""))
-    stats = _summarize_df_for_llm(df)
-    prompt = _build_gemini_prompt(case_text, stats)
-    # Decide provider (auto -> gemini if key present; fallback to ollama)
-    provider_cfg = (os.getenv('LLM_PROVIDER') or 'auto').lower()
-    provider_used = None
-    report = None
-    if provider_cfg == 'gemini':
-        provider_used = 'gemini'
-        report = _call_gemini_generate(prompt)
-    elif provider_cfg == 'ollama':
-        provider_used = 'ollama'
-        report = _call_ollama_generate(prompt)
-    else:
-        # auto
-        if os.getenv('GEMINI_API_KEY'):
-            provider_used = 'gemini'
-            report = _call_gemini_generate(prompt)
-            # If quota error or failure, try ollama next
-            if not report or report.startswith('[LLM error 429]') or report.startswith('[LLM exception]'):
-                alt = _call_ollama_generate(prompt)
-                if alt and not alt.startswith('[OLLAMA'):
-                    provider_used = 'ollama'
-                    report = alt
-        else:
-            provider_used = 'ollama'
-            report = _call_ollama_generate(prompt)
-
-    if not report:
-        report = "[LLM unavailable] Configure GEMINI_API_KEY or OLLAMA_BASE_URL/OLLAMA_MODEL.\n\nPrompt Preview:\n" + prompt[:2000]
-
-    entry["llm_report"] = report
-    entry["llm_provider"] = provider_used or 'unknown'
-    return {"case_id": case_id, "report_text": report, "provider": provider_used}
 
 # =============================
 # LINK ANALYSIS (Top connections for a suspect phone)

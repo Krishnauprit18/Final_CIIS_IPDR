@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
     Container, TextField, Button, Typography, Alert, Box,
-    Card, CardContent, InputAdornment, IconButton, Divider
+    Card, CardContent, IconButton, InputAdornment, Divider
 } from '@mui/material';
 import { Security, Visibility, VisibilityOff, Person, Refresh } from '@mui/icons-material';
 import axios from 'axios';
@@ -71,19 +71,55 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
             className="login-page"
             sx={{
                 minHeight: '100vh',
-                backgroundImage: 'url(/assets/security-bg.jpg)',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                background: 'linear-gradient(135deg, #1e88e5 0%, #1565c0 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 p: 2,
+                position: 'relative',
+                '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'url(/login1.jpeg) center/cover no-repeat',
+                    opacity: 0.3,
+                    filter: 'brightness(1.2)',
+                    zIndex: 0
+                },
+                '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'radial-gradient(circle at 30% 50%, rgba(33,150,243,0.4) 0%, transparent 70%)',
+                    zIndex: 1
+                }
             }}
         >
             {/* Page-level top-left emblem as a separate component */}
             <LogoBadge width={150} top={12} left={12} />
             <Container maxWidth="sm" sx={{ position: 'relative' }}>
-                <Card className="login-card" sx={{ width: '100%', maxWidth: 430, mx: 'auto', overflow: 'hidden', borderRadius: 3, boxShadow: 8 }}>
+                <Card 
+                    className="login-card" 
+                    sx={{ 
+                        width: '100%', 
+                        maxWidth: 430, 
+                        mx: 'auto', 
+                        overflow: 'hidden', 
+                        borderRadius: 3, 
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        position: 'relative',
+                        background: 'linear-gradient(145deg, #1a237e 0%, #0d47a1 100%)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        zIndex: 2
+                    }}
+                >
                     <CardContent sx={{ p: 4, position: 'relative' }}>
                         {/* Right background shield icon */}
                         <Security sx={{ position: 'absolute', right: 16, top: 16, fontSize: 48, color: 'primary.light', opacity: 0.15 }} />
@@ -97,8 +133,30 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                                 style={{ width: 80, height: 'auto', objectFit: 'contain', marginBottom: 8 }}
                             />
-                            <Typography variant="h5" sx={{ fontWeight: 700 }}>Secure Access Portal</Typography>
-                            <Typography variant="body2" color="text.secondary">IPDR Analysis</Typography>
+                            <Typography 
+                                variant="h5" 
+                                sx={{
+                                    fontWeight: 700,
+                                    color: '#ffffff',
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                    letterSpacing: '0.5px',
+                                    fontSize: '1.8rem',
+                                    mb: 1
+                                }}
+                            >
+                                Secure Access Portal
+                            </Typography>
+                            <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                    color: 'text.secondary',
+                                    letterSpacing: '1px',
+                                    textTransform: 'uppercase',
+                                    opacity: 0.8
+                                }}
+                            >
+                                IPDR Analysis
+                            </Typography>
                         </Box>
 
                         <Divider sx={{ my: 2 }} />
@@ -115,6 +173,33 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
                                 margin="normal"
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                        transition: 'all 0.3s',
+                                        borderColor: 'rgba(255, 255, 255, 0.3)',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                        color: '#ffffff',
+                                        '&:hover': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                                            borderColor: 'rgba(255, 255, 255, 0.5)'
+                                        },
+                                        '&.Mui-focused': {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                                            borderColor: 'rgba(255, 255, 255, 0.7)',
+                                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                                        }
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: 'rgba(255, 255, 255, 0.7)'
+                                    },
+                                    '& .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: 'rgba(255, 255, 255, 0.3)'
+                                    },
+                                    '& .MuiInputAdornment-root': {
+                                        color: 'rgba(255, 255, 255, 0.7)'
+                                    }
+                                }}
                                 InputProps={{
                                     startAdornment: (
                                         <InputAdornment position="start">
@@ -187,7 +272,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 variant="contained"
                                 size="large"
                                 disabled={loading || !username || !password || !captchaInput}
-                                sx={{ mt: 3, mb: 1, py: 1.4, borderRadius: 999 }}
+                                sx={{ 
+                                    mt: 3, 
+                                    mb: 1, 
+                                    py: 1.4, 
+                                    borderRadius: '50px',
+                                    background: 'linear-gradient(45deg, #64b5f6 30%, #2196f3 90%)',
+                                    boxShadow: '0 3px 5px 2px rgba(33, 150, 243, .3)',
+                                    transition: 'all 0.3s ease-in-out',
+                                    color: '#1a237e',
+                                    fontWeight: 'bold',
+                                    '&:hover': {
+                                        transform: 'translateY(-2px)',
+                                        boxShadow: '0 6px 10px 4px rgba(33, 150, 243, .3)',
+                                        background: 'linear-gradient(45deg, #90caf9 30%, #42a5f5 90%)'
+                                    }
+                                }}
                             >
                                 {loading ? 'Logging in...' : 'LOG IN NOW'}
                             </Button>
@@ -207,31 +307,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
 export default Login;
 // Inline component to render project logo in login page with multiple fallbacks
 const ProjectLogo: React.FC = () => {
-    const candidates = ['/logo.jpg', '/logo.jpeg', '/logo.png', '/assets/logo.jpg', '/assets/logo.jpeg', '/assets/logo.png'];
-    const [idx, setIdx] = useState(0);
-    const [loaded, setLoaded] = useState(false);
-    const src = candidates[Math.min(idx, candidates.length - 1)];
-    const next = () => setIdx((i) => (i + 1 < candidates.length ? i + 1 : i));
     return (
         <Box className="project-logo" sx={{ mb: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {!loaded && (
-                <Box sx={{
-                    border: '1px dashed', borderColor: 'divider', borderRadius: 1,
-                    width: '85%', height: 140, maxWidth: 480,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'text.secondary', fontSize: 12
-                }}>
-                    Project Logo Area
-                </Box>
-            )}
             <img
-                src={src}
+                src="/Logo.png"
                 alt="Project Logo"
-                onLoad={() => setLoaded(true)}
-                onError={() => next()}
                 style={{
-                    display: loaded ? 'block' : 'none',
-                    width: '100%', height: 400, maxWidth: 700,
+                    width: '100%',
+                    height: 200,
+                    maxWidth: 400,
                     objectFit: 'contain'
                 }}
             />

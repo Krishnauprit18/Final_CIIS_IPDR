@@ -129,9 +129,7 @@ const Dashboard: React.FC = () => {
     // Case AI analysis upload
     const [caseFile, setCaseFile] = useState<File | null>(null);
     const [datasetFile, setDatasetFile] = useState<File | null>(null);
-    const [llmPrompt, setLlmPrompt] = useState<string>('');
     const [caseAnalysisMsg, setCaseAnalysisMsg] = useState<string>('');
-    const [llmSummary, setLlmSummary] = useState<string>('');
     // Correlation (A->B)
     const [corrNodes, setCorrNodes] = useState<{id:string,label:string}[]>([]);
     const [corrEdges, setCorrEdges] = useState<{from:string,to:string,value?:number}[]>([]);
@@ -139,9 +137,6 @@ const Dashboard: React.FC = () => {
     // Geo Maps (iframes to backend HTML)
     const [suspMapSrc, setSuspMapSrc] = useState<string>('');
     const [caseMapSrc, setCaseMapSrc] = useState<string>('');
-    const [convMapSrc, setConvMapSrc] = useState<string>('');
-    const [convA, setConvA] = useState<string>('');
-    const [convB, setConvB] = useState<string>('');
     // Link Analysis removed (map rendered within Suspicious Phones section)
     
     // Profile state
@@ -480,7 +475,6 @@ const Dashboard: React.FC = () => {
             const fd = new FormData();
             fd.append('case_file', caseFile);
             fd.append('dataset_file', datasetFile);
-            if (llmPrompt) fd.append('llm_prompt', llmPrompt);
             const res = await axios.post(`${API_URL}/cases/${selectedCaseId}/ai-analyze`, fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
@@ -490,17 +484,7 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const generateCaseSummary = async () => {
-        if (!selectedCaseId) { setCaseAnalysisMsg('Select a case first.'); return; }
-        try {
-            setCaseAnalysisMsg('Generating AI summary...');
-            const res = await axios.post(`${API_URL}/cases/${selectedCaseId}/ai-summary`);
-            setLlmSummary(res.data?.report_text || '');
-            setCaseAnalysisMsg('AI summary ready.');
-        } catch (e:any) {
-            setCaseAnalysisMsg(e?.response?.data?.detail || 'Failed to generate summary');
-        }
-    };
+
 
     // Enrichment removed
 
@@ -735,7 +719,31 @@ const Dashboard: React.FC = () => {
             </Drawer>
 
             {/* Main content */}
-            <Box component="main" sx={{ flexGrow: 1, ml: { xs: 0, md: `${drawerWidth}px` }, px: { xs: 1, md: 2 }, maxWidth: '100%' }}>
+            <Box 
+                sx={{ 
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    padding: '15px',
+                    zIndex: 1100,
+                    background: 'transparent',
+                    display: 'flex',
+                    alignItems: 'center'
+                }}
+            >
+                <img 
+                    src="/Logo.png" 
+                    alt="Logo" 
+                    style={{ 
+                        height: '159px',
+                        width: '180px', 
+                        marginRight: '15px', 
+                        display: 'block',
+                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+                    }} 
+                />
+            </Box>
+            <Box component="main" sx={{ flexGrow: 1, ml: { xs: 0, md: `${drawerWidth}px` }, px: { xs: 1, md: 2 }, maxWidth: '100%', mt: '110px' }}>
             <Box sx={{ my: 4 }}>
                 <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                     <Security sx={{ mr: 2, color: 'primary.main' }} />
@@ -1235,27 +1243,27 @@ const Dashboard: React.FC = () => {
                                 <Typography variant="subtitle2" gutterBottom>AI Case Analysis (Upload Case + Dataset)</Typography>
                                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
                                     <Button variant="outlined" component="label" size="small">
-                                        Select Case File
-                                        <input type="file" hidden onChange={(e)=> setCaseFile(e.target.files?.[0] || null)} />
+                                        Select Case File (DOCX)
+                                        <input type="file" accept=".docx" hidden onChange={(e)=> setCaseFile(e.target.files?.[0] || null)} />
                                     </Button>
                                     <Typography variant="caption">{caseFile?.name || 'No file selected'}</Typography>
                                     <Button variant="outlined" component="label" size="small">
                                         Select Raw IPDR Dataset
-                                        <input type="file" hidden onChange={(e)=> setDatasetFile(e.target.files?.[0] || null)} />
+                                        <input 
+                                            type="file" 
+                                            accept=".csv,.json,.xml,.txt,.tsv,.log,.yaml" 
+                                            hidden 
+                                            onChange={(e)=> setDatasetFile(e.target.files?.[0] || null)} 
+                                        />
                                     </Button>
-                                    <Typography variant="caption">{datasetFile?.name || 'No file selected'}</Typography>
+                                    <Typography variant="caption">
+                                        {datasetFile?.name || 'Supported: CSV, JSON, XML, TXT, TSV, LOG, YAML'}
+                                    </Typography>
                                 </Box>
-                                <TextField fullWidth multiline minRows={2} label="LLM Prompt (optional)" value={llmPrompt} onChange={(e)=>setLlmPrompt(e.target.value)} sx={{ mb: 1 }} />
                                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                     <Button variant="contained" size="small" onClick={runCaseAnalysis} disabled={!selectedCaseId}>Run AI Analysis</Button>
-                                    <Button variant="outlined" size="small" onClick={generateCaseSummary} disabled={!selectedCaseId}>Generate AI Summary</Button>
                                 </Box>
                                 {caseAnalysisMsg && (<Typography variant="body2" sx={{ mt: 1 }}>{caseAnalysisMsg}</Typography>)}
-                                {llmSummary && (
-                                    <Paper variant="outlined" sx={{ p: 2, mt: 1, maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 12 }}>
-                                        {llmSummary}
-                                    </Paper>
-                                )}
 
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
                                     <TextField size="small" fullWidth label="Notes (optional)" value={saveNotes} onChange={(e)=>setSaveNotes(e.target.value)} />
@@ -1376,31 +1384,6 @@ const Dashboard: React.FC = () => {
                                             <iframe title="case-map" src={caseMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />
                                         ) : (
                                             <Typography color="textSecondary">Select a case and click REFRESH to load map.</Typography>
-                                        )}
-                                    </Paper>
-
-                                    <Paper variant="outlined" sx={{ p: 2 }}>
-                                        <Typography variant="subtitle1" gutterBottom>Two‑Person Conversation Map</Typography>
-                                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 1, flexWrap: 'wrap' }}>
-                                            <TextField size="small" label="Phone A (caller)" value={convA} onChange={(e)=>setConvA(e.target.value.replace(/[^0-9]/g, ''))} inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }} helperText="Enter 10 or 12 digits (no + or country code)" />
-                                            <TextField size="small" label="Phone B (callee)" value={convB} onChange={(e)=>setConvB(e.target.value.replace(/[^0-9]/g, ''))} inputProps={{ inputMode: 'numeric', pattern: '[0-9]*' }} helperText="Enter 10 or 12 digits (no + or country code)" />
-                                            <Button size="small" variant="contained" onClick={()=> {
-                                                const toE164 = (p: string) => {
-                                                    const digits = (p || '').replace(/[^0-9]/g,'');
-                                                    if (digits.length === 10) return `+91${digits}`;
-                                                    if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
-                                                    if (digits.length === 11 && digits.startsWith('0')) return `+91${digits.slice(1)}`;
-                                                    return digits ? `+${digits}` : '';
-                                                };
-                                                const a = toE164(convA);
-                                                const b = toE164(convB);
-                                                setConvMapSrc(`${API_URL}/map/conversation/html?phone_a=${encodeURIComponent(a)}&phone_b=${encodeURIComponent(b)}&days=7`);
-                                            }} disabled={!convA || !convB}>PLOT</Button>
-                                        </Box>
-                                        {convMapSrc ? (
-                                            <iframe title="conversation-map" src={convMapSrc} style={{ width: '100%', height: 620, border: 0, borderRadius: 6 }} />
-                                        ) : (
-                                            <Typography color="textSecondary">Enter Phone A and Phone B, then click PLOT.</Typography>
                                         )}
                                     </Paper>
 
