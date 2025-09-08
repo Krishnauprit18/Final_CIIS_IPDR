@@ -6,8 +6,9 @@ import Dashboard from './Dashboard';
 import Login from './Login';
 import Register from './Register';
 import axios from 'axios';
+import LogoBadge from './LogoBadge';
 
-// Module-scope guard to avoid duplicate verify calls in React.StrictMode (dev-only double mount)
+// Module-scope guard kept for consistency
 let verifyEffectHasRun = false;
 
 const API_URL = 'http://localhost:8000';
@@ -40,7 +41,7 @@ function App() {
 
         const storedToken = localStorage.getItem('ipdr_token');
         const storedUsername = localStorage.getItem('ipdr_username');
-        
+
         if (storedToken && storedUsername) {
             // Verify token with backend
             axios.get(`${API_URL}/auth/verify`, {
@@ -99,26 +100,24 @@ function App() {
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
             {user ? (
-                <Box>
+                <>
+                    {/* Page-level top-left emblem, independent from left drawer */}
+                    <LogoBadge width={150} top={12} left={12} />
+                    <Box>
                     <AppBar position="static" sx={{ width: { md: 'calc(100% - 220px)' }, ml: { md: '220px' } }}>
                         <Toolbar>
                             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                                 IPDR Analysis Dashboard
                             </Typography>
-                            <Typography variant="body2" sx={{ mr: 2 }}>
-                                Welcome, {user.username}
-                            </Typography>
-                            <Button 
-                                color="inherit" 
-                                onClick={handleLogout}
-                                startIcon={<Logout />}
-                            >
-                                Logout
-                            </Button>
+                            <Typography variant="body2" sx={{ mr: 2 }}>Welcome, {user.username}</Typography>
+                            {user.token && (
+                                <Button color="inherit" onClick={handleLogout} startIcon={<Logout />}>Logout</Button>
+                            )}
                         </Toolbar>
                     </AppBar>
                     <Dashboard />
-                </Box>
+                    </Box>
+                </>
             ) : (
                 showRegister ? (
                     <Register onRegistered={handleLogin} onShowLogin={() => setShowRegister(false)} />

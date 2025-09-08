@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Security, Visibility, VisibilityOff, Person, Refresh } from '@mui/icons-material';
 import axios from 'axios';
+import LogoBadge from './LogoBadge';
 
 const API_URL = 'http://localhost:8000';
 
@@ -79,6 +80,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                 p: 2,
             }}
         >
+            {/* Page-level top-left emblem as a separate component */}
+            <LogoBadge width={150} top={12} left={12} />
             <Container maxWidth="sm" sx={{ position: 'relative' }}>
                 <Card className="login-card" sx={{ width: '100%', maxWidth: 430, mx: 'auto', overflow: 'hidden', borderRadius: 3, boxShadow: 8 }}>
                     <CardContent sx={{ p: 4, position: 'relative' }}>
@@ -190,22 +193,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                             </Button>
                         </form>
 
-                        <Alert
-                            severity="info"
-                            sx={{ mt: 2, backgroundColor: 'primary.main', color: 'white', '& .MuiAlert-icon': { color: 'white' } }}
-                        >
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'white' }}>
-                                Demo Credentials
-                            </Typography>
-                            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                <Typography variant="body2" sx={{ color: 'white', fontFamily: 'monospace' }}>
-                                    admin / admin
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'white', fontFamily: 'monospace' }}>
-                                    analyst / analyst
-                                </Typography>
-                            </Box>
-                        </Alert>
+                        {/* Link to registration page */}
                         <Button color="inherit" fullWidth onClick={() => onShowRegister && onShowRegister()} sx={{ mt: 1 }}>
                             New user? Register
                         </Button>
@@ -229,7 +217,7 @@ const ProjectLogo: React.FC = () => {
             {!loaded && (
                 <Box sx={{
                     border: '1px dashed', borderColor: 'divider', borderRadius: 1,
-                    width: '80%', height: 96, maxWidth: 360,
+                    width: '85%', height: 140, maxWidth: 480,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'text.secondary', fontSize: 12
                 }}>
@@ -243,7 +231,7 @@ const ProjectLogo: React.FC = () => {
                 onError={() => next()}
                 style={{
                     display: loaded ? 'block' : 'none',
-                    width: '80%', height: 96, maxWidth: 360,
+                    width: '100%', height: 400, maxWidth: 700,
                     objectFit: 'contain'
                 }}
             />

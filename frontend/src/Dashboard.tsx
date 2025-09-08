@@ -7,7 +7,7 @@ import {
     Chip, Badge, List, ListItemText, ListItemIcon,
     Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, LinearProgress, Divider,
-    Drawer, ListSubheader, ListItemButton, Avatar,
+    Drawer, ListSubheader, ListItemButton,
     ListItem, Select, MenuItem, FormControl, InputLabel, Collapse
 } from '@mui/material';
 import { 
@@ -132,9 +132,6 @@ const Dashboard: React.FC = () => {
     const [llmPrompt, setLlmPrompt] = useState<string>('');
     const [caseAnalysisMsg, setCaseAnalysisMsg] = useState<string>('');
     const [llmSummary, setLlmSummary] = useState<string>('');
-    // Enrichment
-    const [ipLookup, setIpLookup] = useState('');
-    const [ipEnrichment, setIpEnrichment] = useState<any | null>(null);
     // Correlation (A->B)
     const [corrNodes, setCorrNodes] = useState<{id:string,label:string}[]>([]);
     const [corrEdges, setCorrEdges] = useState<{from:string,to:string,value?:number}[]>([]);
@@ -256,6 +253,9 @@ const Dashboard: React.FC = () => {
     };
 
     const drawerWidth = 220;
+    // Reserve space at page top for the fixed emblem so the drawer
+    // starts below it and never scrolls behind the logo.
+    const emblemOffsetPx = 170; // keep in sync with logo size/offset in App.tsx (LogoBadge width 150 ~ height ~170)
 
     // Fetch dashboard statistics
     const fetchDashboardStats = useCallback(async () => {
@@ -502,14 +502,7 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    // Enrichment
-    const enrichIp = async (ip: string) => {
-        if (!ip) return;
-        try {
-            const res = await axios.get(`${API_URL}/enrich/ip`, { params: { ip } });
-            setIpEnrichment(res.data?.enrichment || null);
-        } catch (e) { setIpEnrichment(null); }
-    };
+    // Enrichment removed
 
     // Fetch A->B correlation
     const fetchCorrelation = useCallback(async (limit: number = 100) => {
@@ -628,16 +621,25 @@ const Dashboard: React.FC = () => {
                     width: drawerWidth,
                     flexShrink: 0,
                     display: { xs: 'none', md: 'block' },
-                    '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box', p: 1.5 },
+                    // Professional, integrated left pane: subtle divider, themed background,
+                    // no visible scrollbar (content still scrolls if needed)
+                    '& .MuiDrawer-paper': {
+                        width: drawerWidth,
+                        boxSizing: 'border-box',
+                        p: 1.5,
+                        top: `${emblemOffsetPx}px`,
+                        height: `calc(100vh - ${emblemOffsetPx}px)`,
+                        bgcolor: 'background.default',
+                        borderRight: '1px solid',
+                        borderColor: 'divider',
+                        overflowY: 'auto',
+                        MsOverflowStyle: 'none',      // IE/Edge
+                        scrollbarWidth: 'none',       // Firefox
+                    },
+                    '& .MuiDrawer-paper::-webkit-scrollbar': { display: 'none' }, // WebKit
                 }}
             >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Avatar><AccountCircle /></Avatar>
-                    <Box>
-                        <Typography variant="subtitle1">{profile?.name || profile?.username || 'User'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{profile?.role || ''}</Typography>
-                    </Box>
-                </Box>
+                {/* Removed header identity block for a cleaner, more compact left pane */}
 
                 <List subheader={<ListSubheader disableSticky>Features</ListSubheader>}>
                     <ListItemButton selected={activeTab===0} onClick={() => setActiveTab(0)}>
@@ -676,15 +678,11 @@ const Dashboard: React.FC = () => {
                         <ListItemIcon><AccountCircle /></ListItemIcon>
                         <ListItemText primary="Cases" />
                     </ListItemButton>
-                    <ListItemButton selected={activeTab===9} onClick={() => setActiveTab(9)}>
-                        <ListItemIcon><Wifi /></ListItemIcon>
-                        <ListItemText primary="Enrichment" />
-                    </ListItemButton>
-                    <ListItemButton selected={activeTab===10} onClick={() => { setActiveTab(10); fetchCorrelation(100); }}>
+                    <ListItemButton selected={activeTab===9} onClick={() => { setActiveTab(9); fetchCorrelation(100); }}>
                         <ListItemIcon><Timeline /></ListItemIcon>
                         <ListItemText primary="Correlation (A→B)" />
                     </ListItemButton>
-                    <ListItemButton selected={activeTab===11} onClick={() => { setActiveTab(11); setSuspMapSrc(`${API_URL}/map/suspicious-phones/html?days=7`); }}>
+                    <ListItemButton selected={activeTab===10} onClick={() => { setActiveTab(10); setSuspMapSrc(`${API_URL}/map/suspicious-phones/html?days=7`); }}>
                         <ListItemIcon><Wifi /></ListItemIcon>
                         <ListItemText primary="Geo Map" />
                     </ListItemButton>
@@ -991,74 +989,108 @@ const Dashboard: React.FC = () => {
                                         Large Graph (100 nodes)
                                     </Button>
                                 </Box>
-                                <Paper variant="outlined" sx={{ p: 2, height: '600px', mb: 2 }}>
-                                    {graphData.nodes.length > 0 ? (
-                                        <Graph
-                                            key={`graph-${graphData.nodes.length}-${graphData.edges.length}`}
-                                            graph={{
-                                                // Deduplicate nodes by stable backend id and keep the same id to avoid patch collisions
-                                                nodes: Array.from(new Map(graphData.nodes.map(n => [n.id, n])).values()).map(node => ({
-                                                    id: node.id,
-                                                    label: node.label,
-                                                    color: node.label.startsWith('+')
-                                                        ? { background: '#4CAF50', border: '#2E7D32' }  // Green for phones
-                                                        : { background: '#2196F3', border: '#1976D2' }, // Blue for IPs
-                                                    font: { color: 'white', size: 12 },
-                                                    shape: node.label.startsWith('+') ? 'circle' : 'box'
-                                                })),
-                                                edges: (() => {
-                                                    // Deduplicate edges by (from,to) pair and use stable ids from backend
-                                                    const edgeSet = new Set<string>();
-                                                    const uniq: { from: string; to: string }[] = [];
-                                                    for (const e of graphData.edges) {
-                                                        const key = `${e.from}->${e.to}`;
-                                                        if (!edgeSet.has(key)) {
-                                                            edgeSet.add(key);
-                                                            uniq.push({ from: e.from, to: e.to });
+                                <Paper variant="outlined" sx={{ p: 2, height: '640px', mb: 2, bgcolor: 'background.paper' }}>
+                                    {graphData.nodes.length > 0 ? (() => {
+                                        // Build professional-styled vis-network config
+                                        // 1) Degree-based sizing
+                                        const edgeSet = new Set<string>();
+                                        const uniqEdges: { from: string; to: string }[] = [];
+                                        const degree: Record<string, number> = {};
+                                        for (const e of graphData.edges) {
+                                            const key = `${e.from}->${e.to}`;
+                                            if (!edgeSet.has(key)) {
+                                                edgeSet.add(key);
+                                                uniqEdges.push({ from: e.from, to: e.to });
+                                                degree[e.from] = (degree[e.from] || 0) + 1;
+                                                degree[e.to] = (degree[e.to] || 0) + 1;
+                                            }
+                                        }
+                                        // 2) Groups + tooltips
+                                        const nodes = Array.from(new Map(graphData.nodes.map(n => [n.id, n])).values()).map(node => {
+                                            const isPhone = node.label.startsWith('+');
+                                            const deg = degree[node.id] || 1;
+                                            const base = isPhone ? 14 : 10;
+                                            const size = Math.min(28, base + Math.sqrt(deg) * 2.2);
+                                            return {
+                                                id: node.id,
+                                                label: node.label,
+                                                group: isPhone ? 'phone' : 'ip',
+                                                value: size,
+                                                title: (isPhone ? 'Phone: ' : 'IP: ') + node.label,
+                                            };
+                                        });
+                                        const edges = uniqEdges.map((edge, index) => ({
+                                            id: `edge-${index}`,
+                                            from: edge.from,
+                                            to: edge.to,
+                                        }));
+                                        const options = {
+                                            autoResize: true,
+                                            layout: { improvedLayout: true },
+                                            physics: {
+                                                enabled: true,
+                                                solver: 'forceAtlas2Based',
+                                                stabilization: { iterations: 300, updateInterval: 50 },
+                                                forceAtlas2Based: {
+                                                    gravitationalConstant: -50,
+                                                    centralGravity: 0.015,
+                                                    springLength: 120,
+                                                    springConstant: 0.08,
+                                                    damping: 0.4,
+                                                    avoidOverlap: 1.0
+                                                },
+                                            },
+                                            interaction: {
+                                                hover: true,
+                                                tooltipDelay: 100,
+                                                navigationButtons: true,
+                                                keyboard: { enabled: true }
+                                            },
+                                            edges: {
+                                                color: { color: '#9e9e9e', highlight: '#64b5f6' },
+                                                width: 1,
+                                                smooth: { type: 'dynamic' },
+                                            },
+                                            nodes: {
+                                                shape: 'dot',
+                                                font: { color: '#e0e0e0', size: 12 },
+                                                shadow: true,
+                                            },
+                                            groups: {
+                                                phone: {
+                                                    color: { background: '#26A69A', border: '#00897B', highlight: { background: '#26A69A', border: '#4DB6AC' } },
+                                                    shape: 'dot',
+                                                },
+                                                ip: {
+                                                    color: { background: '#42A5F5', border: '#1E88E5', highlight: { background: '#42A5F5', border: '#64B5F6' } },
+                                                    shape: 'box',
+                                                },
+                                            },
+                                            height: '600px'
+                                        } as const;
+                                        return (
+                                            <Graph
+                                                key={`graph-${nodes.length}-${edges.length}`}
+                                                graph={{ nodes, edges }}
+                                                options={options}
+                                                events={{
+                                                    select: (event) => {
+                                                        const { nodes } = event;
+                                                        if (nodes.length > 0) {
+                                                            const nodeId: string = nodes[0];
+                                                            if (nodeId.startsWith('ip:')) {
+                                                                const ip = nodeId.substring(3);
+                                                                // Open Search tab prefilled with this IP
+                                                                setActiveTab(3);
+                                                                setIpSearchQuery(ip);
+                                                                setTimeout(()=>handleSearch('ip'), 0);
+                                                            }
                                                         }
                                                     }
-                                                    return uniq.map((edge, index) => ({
-                                                        id: `edge-${index}`,
-                                                        from: edge.from,
-                                                        to: edge.to,
-                                                        color: { color: '#848484' },
-                                                        arrows: { to: { enabled: true } }
-                                                    }));
-                                                })()
-                                            }}
-                                            options={{
-                                                layout: {
-                                                    hierarchical: false
-                                                },
-                                                edges: {
-                                                    color: "#848484",
-                                                    arrows: { to: { enabled: true } }
-                                                },
-                                                physics: {
-                                                    enabled: true,
-                                                    stabilization: { iterations: 200 }
-                                                },
-                                                nodes: {
-                                                    font: { color: 'white' },
-                                                    borderWidth: 2
-                                                },
-                                                height: '550px'
-                                            }}
-                                            events={{
-                                                select: (event) => {
-                                                    const { nodes } = event;
-                                                    if (nodes.length > 0) {
-                                                        const nodeId: string = nodes[0];
-                                                        if (nodeId.startsWith('ip:')) {
-                                                            const ip = nodeId.substring(3);
-                                                            setIpLookup(ip);
-                                                            enrichIp(ip);
-                                                        }
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                    ) : (
+                                                }}
+                                            />
+                                        );
+                                    })() : (
                                         <Box sx={{ 
                                             display: 'flex', 
                                             alignItems: 'center', 
@@ -1241,27 +1273,9 @@ const Dashboard: React.FC = () => {
                             </Box>
                         )}
 
-                        {activeTab === 9 && (
-                            <Box sx={{ p: 3 }}>
-                                <Typography variant="h6" gutterBottom>IP Enrichment (Offline Cache)</Typography>
-                                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                                    <TextField size="small" label="Enter IP" value={ipLookup} onChange={(e)=>setIpLookup(e.target.value)} />
-                                    <Button variant="contained" size="small" onClick={()=>enrichIp(ipLookup)} disabled={!ipLookup}>Enrich</Button>
-                                </Box>
-                                {ipEnrichment && (
-                                    <Paper variant="outlined" sx={{ p: 2 }}>
-                                        <Typography variant="body2">IP: {ipEnrichment.ip}</Typography>
-                                        <Typography variant="body2">Public: {String(ipEnrichment.is_public)}</Typography>
-                                        <Typography variant="body2">Category: {ipEnrichment.category}</Typography>
-                                        <Typography variant="body2">ASN: {ipEnrichment.asn || '-'}</Typography>
-                                        <Typography variant="body2">Org: {ipEnrichment.org || '-'}</Typography>
-                                        <Typography variant="body2">Country: {ipEnrichment.country || '-'}</Typography>
-                                    </Paper>
-                                )}
-                            </Box>
-                        )}
+                        {/* Enrichment tab removed */}
 
-                        {activeTab === 10 && (
+                        {activeTab === 9 && (
                             <Box sx={{ p: 3 }}>
                                 <Typography variant="h6" gutterBottom>Correlation (A → B) — Connecting the Dots</Typography>
                                 <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
@@ -1329,7 +1343,7 @@ const Dashboard: React.FC = () => {
                             </Box>
                         )}
 
-                        {activeTab === 11 && (
+                        {activeTab === 10 && (
                             <Box sx={{ p: 3 }}>
                                 <Typography variant="h6" gutterBottom>Geo Maps</Typography>
                                 <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column' }}>

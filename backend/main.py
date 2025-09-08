@@ -24,7 +24,7 @@ from data_normalizer import DataNormalizer
 from communication_mapping import CommunicationMapper
 from suspicious_activity_detector import SuspiciousActivityDetector
 from search_query_system import SearchQuerySystem, SearchCriteria, SearchOperator, SortOrder
-from enrichment import IPEntityEnricher
+# Enrichment feature removed
 
 app = FastAPI()
 
@@ -193,7 +193,7 @@ data_normalizer = DataNormalizer()
 UPLOAD_DIR = "uploads"
 ALLOWLIST_IPS: set = set()
 DENYLIST_IPS: set = set()
-ip_enricher: Optional[IPEntityEnricher] = None
+# Enrichment removed: no enricher instance
 CASE_ANALYSES: Dict[int, Dict[str, Any]] = {}
 
 # --- LLM/Gemini helpers (integration point) ---
@@ -524,9 +524,7 @@ def startup_event():
                 DENYLIST_IPS = set(map(str, deny or []))
         except Exception:
             ALLOWLIST_IPS.clear(); DENYLIST_IPS.clear()
-    # Initialize IP enricher (loads local CSV cache if present)
-    global ip_enricher
-    ip_enricher = IPEntityEnricher(os.path.dirname(__file__))
+    # Enrichment removed: no enricher init
 
 @app.get("/")
 def read_root():
@@ -860,14 +858,7 @@ def get_bparty_summary():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating B-Party summary: {str(e)}")
 
-@app.get("/enrich/ip")
-def enrich_ip(ip: str):
-    """Enrich single IP from offline cache + classification."""
-    global ip_enricher
-    if not ip:
-        raise HTTPException(status_code=400, detail="ip query param required")
-    enr = ip_enricher.enrich_ip(ip) if ip_enricher else {"ip": ip}
-    return {"enrichment": enr}
+# Enrichment endpoint removed
 
 @app.get("/correlation/a2b")
 def correlation_a2b(limit: int = 100):
