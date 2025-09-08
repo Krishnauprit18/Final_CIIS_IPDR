@@ -74,7 +74,7 @@ def get_db_conn() -> sqlite3.Connection:
 def init_db() -> None:
     conn = get_db_conn()
     cur = conn.cursor()
-    # Users table
+    # Users table - simplified without role
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -83,7 +83,6 @@ def init_db() -> None:
             email TEXT UNIQUE,
             password_hash TEXT NOT NULL,
             password_salt TEXT,
-            role TEXT NOT NULL,
             name TEXT,
             post TEXT,
             district TEXT,
@@ -150,25 +149,22 @@ def init_db() -> None:
     conn.commit()
 
     # Seed default users if they don't exist
-    def ensure_user(username: str, password_plain: str, role: str) -> None:
+    def ensure_user(username: str, password_plain: str) -> None:
         cur.execute("SELECT 1 FROM users WHERE username = ?", (username,))
         if cur.fetchone() is None:
             salt_hex, hash_hex = hash_password_pbkdf2(password_plain)
             cur.execute(
-                "INSERT INTO users (username, email, password_hash, password_salt, role, name, created_at) VALUES (?, NULL, ?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, email, password_hash, password_salt, name, created_at) VALUES (?, NULL, ?, ?, ?, ?)",
                 (
                     username,
                     hash_hex,
                     salt_hex,
-                    role,
                     username,
                     datetime.now().isoformat(),
                 ),
             )
             conn.commit()
-
-    ensure_user("admin", "admin", "administrator")
-    ensure_user("analyst", "analyst", "analyst")
+    
     conn.close()
 
 # --- Password hashing utilities (PBKDF2) ---
@@ -218,18 +214,6 @@ CASE_ANALYSES: Dict[int, Dict[str, Any]] = {}
 # --- Authentication ---
 security = HTTPBearer()
 
-def require_role(allowed_roles: List[str]):
-    def role_checker(credentials: HTTPAuthorizationCredentials = Depends(security)):
-        token = credentials.credentials
-        session = get_session(token)
-        if not session:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        user = get_user_by_username(session.get("username"))
-        if not user or user.get("role") not in allowed_roles:
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return session
-    return role_checker
-
 #########################
 # User/Session Utilities #
 #########################
@@ -255,15 +239,14 @@ def insert_user(user: Dict[str, Any]) -> None:
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO users (username, email, password_hash, password_salt, role, name, post, district, thana, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, email, password_hash, password_salt, name, post, district, thana, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             user["username"],
             user.get("email"),
             user["password_hash"],
             user.get("password_salt"),
-            user.get("role", "analyst"),
             user.get("name"),
             user.get("profile", {}).get("post"),
             user.get("profile", {}).get("district"),
@@ -434,7 +417,7 @@ async def login(request: LoginRequest):
 @app.post("/auth/register")
 async def register(request: RegisterRequest):
     """
-    Simple in-memory registration for demo purposes.
+    Simple registration functionality.
     Username is the email's local part by default; we store the full email.
     """
     # Basic email validation to avoid optional dependency on email-validator
@@ -455,7 +438,6 @@ async def register(request: RegisterRequest):
         "username": username,
         "password_hash": hash_hex,
         "password_salt": salt_hex,
-        "role": "analyst",
         "email": email_lower,
         "name": request.name,
         "profile": {
@@ -498,7 +480,6 @@ async def get_profile(session: Dict = Depends(verify_token)):
     return {
         "username": user.get("username"),
         "email": user.get("email"),
-        "role": user.get("role"),
         "name": user.get("name"),
         "post": user.get("post"),
         "district": user.get("district"),
@@ -2897,7 +2878,7 @@ def get_detection_statistics():
         raise HTTPException(status_code=500, detail=f"Error getting detection statistics: {str(e)}")
 
 @app.post("/suspicious/export-alerts")
-async def export_suspicious_alerts(format: str = "csv", session: Dict = Depends(require_role(["administrator"]))):
+async def export_suspicious_alerts(format: str = "csv", session: Dict = Depends(verify_token)):
     """
     Export all suspicious activity alerts to specified format.
     """
@@ -2946,7 +2927,7 @@ def update_alert_thresholds(
     short_duration_max: Optional[int] = None,
     high_frequency_min_count: Optional[int] = None,
     port_scanning_threshold: Optional[int] = None,
-    session: Dict = Depends(require_role(["administrator"]))
+    session: Dict = Depends(verify_token)
 ):
     """
     Update alert thresholds for suspicious activity detection.
@@ -3264,7 +3245,7 @@ def get_search_statistics():
         raise HTTPException(status_code=500, detail=f"Error getting search statistics: {str(e)}")
 
 @app.post("/search/export")
-def export_search_results(export_request: dict, session: Dict = Depends(require_role(["administrator", "analyst"]))):
+def export_search_results(export_request: dict, session: Dict = Depends(verify_token)):
     """
     Export search results to CSV file.
     Allows investigators to save search results for further analysis.
