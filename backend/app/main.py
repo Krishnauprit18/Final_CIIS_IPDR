@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import legacy_handlers
+from app.db.legacy_compat import install_legacy_postgres_compat
 from app.api.routers import (
     analysis,
     analytics,
@@ -18,6 +19,8 @@ from app.api.routers import (
     search
 )
 from app.core.config import FRONTEND_ORIGIN
+
+install_legacy_postgres_compat(legacy_handlers)
 
 def create_app() -> FastAPI:
     application = FastAPI(title="CIIS IPDR Analysis API")
