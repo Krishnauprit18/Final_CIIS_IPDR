@@ -5,12 +5,7 @@ from typing import BinaryIO
 
 
 class StorageBackend(ABC):
-    """
-    Common interface for object storage.
-
-    Application code should depend on this interface instead of directly
-    writing files to the local filesystem.
-    """
+    """Common interface for durable object storage."""
 
     @abstractmethod
     def upload_fileobj(
@@ -19,32 +14,21 @@ class StorageBackend(ABC):
         object_key: str,
         content_type: str | None = None,
     ) -> str:
-        """
-        Upload a file-like object and return the stored object key.
-        """
         raise NotImplementedError
 
     @abstractmethod
-    def download_fileobj(
-        self,
-        object_key: str,
-        destination: BinaryIO,
-    ) -> None:
-        """
-        Download an object into a writable file-like object.
-        """
+    def download_fileobj(self, object_key: str, destination: BinaryIO) -> None:
         raise NotImplementedError
 
     @abstractmethod
     def delete_object(self, object_key: str) -> None:
-        """
-        Delete one stored object.
-        """
         raise NotImplementedError
 
     @abstractmethod
     def object_exists(self, object_key: str) -> bool:
-        """
-        Return True if the object exists.
-        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def healthcheck(self) -> None:
+        """Raise when the configured storage service/bucket is unavailable."""
         raise NotImplementedError
