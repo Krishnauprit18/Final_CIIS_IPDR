@@ -10,7 +10,9 @@ import pandas as pd
 
 from app.core.config import WORKER_POLL_SECONDS
 from app.jobs.service import (
+    get_job,
     mark_job_failed,
+    mark_job_retrying,
     mark_job_running,
     mark_job_succeeded,
 )
@@ -18,11 +20,18 @@ from app.queue.sqs import (
     delete_analysis_message,
     receive_analysis_messages,
 )
-from app.storage.service import download_bytes, upload_bytes
+from app.storage.service import (
+    download_bytes,
+    storage_uri,
+    upload_bytes,
+)
 
 from app.services.communication_mapping import CommunicationMapper
 from app.services.data_normalizer import DataNormalizer
 from app.services.suspicious_activity_detector import SuspiciousActivityDetector
+
+
+MAX_RECEIVE_COUNT = 3
 
 
 def _write_temp_file(data: bytes, suffix: str = ".csv") -> Path:
@@ -42,30 +51,11 @@ def _write_temp_file(data: bytes, suffix: str = ".csv") -> Path:
 
 def _load_dataset(dataset_bytes: bytes, filename: str) -> pd.DataFrame:
     suffix = Path(filename).suffix or ".csv"
-
-    temp_path = _write_temp_file(
-        dataset_bytes,
-        suffix=suffix,
-    )
+    temp_path = _write_temp_file(dataset_bytes, suffix=suffix)
 
     try:
         normalizer = DataNormalizer()
-
-        # Prefer the project's normalization pipeline.
-        if hasattr(normalizer, "normalize_file"):
-            result = normalizer.normalize_file(str(temp_path))
-
-            if isinstance(result, pd.DataFrame):
-                return result
-
-            if isinstance(result, tuple):
-                for item in result:
-                    if isinstance(item, pd.DataFrame):
-                        return item
-
-        # CSV fallback keeps Phase 4 compatible with existing datasets.
-        return pd.read_csv(temp_path)
-
+        return normalizer.normalize_file(str(temp_path))
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -83,8 +73,7 @@ def _run_analysis(df: pd.DataFrame) -> dict:
     }
 
     try:
-        mapping_stats = mapper.get_mapping_stats()
-        result["mapping_stats"] = mapping_stats
+        result["mapping_stats"] = mapper.get_mapping_stats()
     except Exception as exc:
         result["mapping_stats_error"] = str(exc)
 
@@ -104,7 +93,6 @@ def process_message(message: dict) -> None:
     job_id = int(body["job_id"])
     case_id = int(body["case_id"])
     dataset_key = body["dataset_key"]
-
     dataset_filename = dataset_key.rsplit("/", 1)[-1]
 
     receive_count = int(
@@ -120,16 +108,28 @@ def process_message(message: dict) -> None:
         f"attempt={receive_count}"
     )
 
+    existing_job = get_job(job_id)
+    if existing_job is None:
+        # Bad/stale messages should be retried and eventually moved to the DLQ.
+        raise ValueError(f"Job {job_id} does not exist")
+
+    if existing_job["status"] == "SUCCEEDED":
+        # SQS is at-least-once. A successfully processed message can be
+        # delivered again, so acknowledge the duplicate without reprocessing.
+        print(f"[worker] job={job_id} already succeeded; deleting duplicate message")
+        delete_analysis_message(message["ReceiptHandle"])
+        return
+
+    if existing_job["status"] == "FAILED":
+        # Do not acknowledge failed work. If it is still on the main queue,
+        # leaving it unacked preserves the DLQ/redrive behavior.
+        raise RuntimeError(f"Job {job_id} is already marked FAILED")
+
     mark_job_running(job_id)
 
     try:
         dataset_bytes = download_bytes(dataset_key)
-
-        df = _load_dataset(
-            dataset_bytes,
-            dataset_filename,
-        )
-
+        df = _load_dataset(dataset_bytes, dataset_filename)
         result = _run_analysis(df)
 
         result_payload = {
@@ -139,10 +139,7 @@ def process_message(message: dict) -> None:
             "analysis": result,
         }
 
-        result_key = (
-            f"analysis-results/{case_id}/{job_id}/result.json"
-        )
-
+        result_key = f"analysis-results/{case_id}/{job_id}/result.json"
         upload_bytes(
             json.dumps(
                 result_payload,
@@ -154,36 +151,24 @@ def process_message(message: dict) -> None:
         )
 
         mark_job_succeeded(job_id)
-
-        delete_analysis_message(
-            message["ReceiptHandle"]
-        )
+        delete_analysis_message(message["ReceiptHandle"])
 
         print(
             f"[worker] job={job_id} succeeded "
-            f"result=s3://analysis-results/{case_id}/{job_id}"
+            f"result={storage_uri(result_key)}"
         )
 
     except Exception as exc:
-        print(
-            f"[worker] job={job_id} failed: {exc}"
-        )
-
+        print(f"[worker] job={job_id} failed: {exc}")
         traceback.print_exc()
 
-        # Important:
-        # Message ko delete NAHI karenge.
-        # SQS visibility timeout ke baad message retry hoga.
-        #
-        # maxReceiveCount=3 ke baad LocalStack/AWS SQS
-        # message ko DLQ me bhej dega.
+        if receive_count >= MAX_RECEIVE_COUNT:
+            mark_job_failed(job_id, str(exc))
+        else:
+            mark_job_retrying(job_id, str(exc))
 
-        if receive_count >= 3:
-            mark_job_failed(
-                job_id,
-                str(exc),
-            )
-
+        # Deliberately do not delete the SQS message. After the visibility
+        # timeout it is retried; after maxReceiveCount it is moved to the DLQ.
         raise
 
 
@@ -205,8 +190,7 @@ def run_worker() -> None:
                 try:
                     process_message(message)
                 except Exception:
-                    # Failure intentionally swallowed here so worker
-                    # process itself stays alive.
+                    # One failed job must not kill the worker process.
                     pass
 
         except KeyboardInterrupt:
@@ -214,10 +198,7 @@ def run_worker() -> None:
             break
 
         except Exception as exc:
-            print(
-                f"[worker] queue error: {exc}"
-            )
-
+            print(f"[worker] queue error: {exc}")
             time.sleep(5)
 
 
