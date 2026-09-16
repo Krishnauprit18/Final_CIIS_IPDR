@@ -47,6 +47,17 @@ def mark_job_running(job_id: int) -> None:
     update_job_status(
         job_id,
         "RUNNING",
+        error_message=None,
+    )
+
+
+def mark_job_retrying(job_id: int, error: str) -> None:
+    # The message remains in SQS and becomes visible again after the
+    # visibility timeout. QUEUED accurately represents that waiting state.
+    update_job_status(
+        job_id,
+        "QUEUED",
+        error_message=error[:2000],
     )
 
 
@@ -54,6 +65,7 @@ def mark_job_succeeded(job_id: int) -> None:
     update_job_status(
         job_id,
         "SUCCEEDED",
+        error_message=None,
     )
 
 
@@ -72,7 +84,7 @@ def job_is_terminal(job_id: int) -> bool:
     job = get_job_record(job_id)
 
     if not job:
-        return True
+        return False
 
     return job["status"] in {
         "SUCCEEDED",
