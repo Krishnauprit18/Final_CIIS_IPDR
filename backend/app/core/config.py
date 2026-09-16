@@ -50,7 +50,9 @@ STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "ciisadmin123").strip() or 
 STORAGE_REGION = os.getenv("STORAGE_REGION", "us-east-1")
 STORAGE_USE_SSL = _env_bool("STORAGE_USE_SSL", default=False)
 
-# Phase 4 queue configuration.
+# Phase 4 queue configuration. Local development points at LocalStack. In AWS,
+# leave SQS_ENDPOINT_URL / explicit keys empty and boto3 will use the standard
+# AWS credential provider chain (for example an EC2/ECS/IAM role).
 SQS_ENDPOINT_URL = os.getenv(
     "SQS_ENDPOINT_URL",
     "http://localhost:4566",
@@ -64,12 +66,12 @@ SQS_REGION = os.getenv(
 SQS_ACCESS_KEY = os.getenv(
     "SQS_ACCESS_KEY",
     "test",
-)
+).strip() or None
 
 SQS_SECRET_KEY = os.getenv(
     "SQS_SECRET_KEY",
     "test",
-)
+).strip() or None
 
 SQS_ANALYSIS_QUEUE_NAME = os.getenv(
     "SQS_ANALYSIS_QUEUE_NAME",
