@@ -5,13 +5,7 @@ from app.core.config import DATASET_FILE, PROJECT_ROOT
 
 
 def _iter_registered_routes(routes):
-    """Yield concrete FastAPI routes across direct and included-router wrappers.
-
-    Newer FastAPI versions can keep included routers as wrapper objects in
-    ``app.routes`` instead of flattening every route at the top level. This
-    helper makes the Phase 1 contract test version-tolerant while still
-    verifying the exact public API surface.
-    """
+    """Yield concrete FastAPI routes across direct and included-router wrappers."""
     for route in routes:
         path = getattr(route, "path", None)
         methods = getattr(route, "methods", None)
@@ -22,6 +16,12 @@ def _iter_registered_routes(routes):
         nested_routes = getattr(route, "routes", None)
         if nested_routes:
             yield from _iter_registered_routes(nested_routes)
+            continue
+
+        nested_router = getattr(route, "router", None)
+        nested_router_routes = getattr(nested_router, "routes", None)
+        if nested_router_routes:
+            yield from _iter_registered_routes(nested_router_routes)
 
 
 def test_phase1_route_contract_is_preserved():
