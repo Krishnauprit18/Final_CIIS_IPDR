@@ -6,6 +6,7 @@ from typing import Any
 from app.db.repositories import (
     create_job_record,
     get_job_record,
+    update_job_payload,
     update_job_status,
 )
 
@@ -41,6 +42,16 @@ def get_job(job_id: int) -> dict[str, Any] | None:
     job.pop("payload_json", None)
 
     return job
+
+
+def set_job_result(job_id: int, result_uri: str) -> None:
+    job = get_job_record(job_id)
+    if not job:
+        raise KeyError(job_id)
+
+    payload = json.loads(job.get("payload_json") or "{}")
+    payload["result_uri"] = result_uri
+    update_job_payload(job_id, payload)
 
 
 def mark_job_running(job_id: int) -> None:
