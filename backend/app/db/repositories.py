@@ -160,6 +160,7 @@ def list_saved_search_records(case_id: int) -> list[Dict[str, Any]]:
         ).all()
         return [_model_to_dict(row) for row in rows]
 
+
 def create_job_record(
     *,
     case_id: int,
@@ -188,7 +189,6 @@ def create_job_record(
 def get_job_record(job_id: int) -> Optional[Dict[str, Any]]:
     with session_scope() as db:
         job = db.get(Job, job_id)
-
         return _model_to_dict(job) if job else None
 
 
@@ -205,6 +205,18 @@ def update_job_status(
             .values(
                 status=status,
                 error_message=error_message,
+                updated_at=datetime.now(),
+            )
+        )
+
+
+def update_job_payload(job_id: int, payload: Dict[str, Any]) -> None:
+    with session_scope() as db:
+        db.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                payload_json=json.dumps(payload),
                 updated_at=datetime.now(),
             )
         )
