@@ -26,3 +26,8 @@ def load_env_file(path: Path = ENV_FILE) -> None:
 
 load_env_file()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://ciis:ciis@localhost:5432/ciis",
+)
