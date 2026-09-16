@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app import legacy_handlers
+from app.api.routers import (
+    analysis,
+    analytics,
+    auth,
+    cases,
+    health,
+    link_analysis,
+    mapping,
+    maps,
+    normalization,
+    processing,
+    search
+)
+from app.core.config import FRONTEND_ORIGIN
+
+def create_app() -> FastAPI:
+    application = FastAPI(title="CIIS IPDR Analysis API")
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=[FRONTEND_ORIGIN],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    application.include_router(analysis.router)
+    application.include_router(analytics.router)
+    application.include_router(auth.router)
+    application.include_router(cases.router)
+    application.include_router(health.router)
+    application.include_router(link_analysis.router)
+    application.include_router(mapping.router)
+    application.include_router(maps.router)
+    application.include_router(normalization.router)
+    application.include_router(processing.router)
+    application.include_router(search.router)
+
+    @application.on_event("startup")
+    def _startup() -> None:
+        legacy_handlers.startup_event()
+
+    return application
+
+app = create_app()
+startup_event = legacy_handlers.startup_event
