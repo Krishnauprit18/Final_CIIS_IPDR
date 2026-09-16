@@ -4,34 +4,29 @@ from app.main import app
 from app.core.config import DATASET_FILE, PROJECT_ROOT
 
 
-def _iter_registered_routes(routes):
-    """Yield concrete FastAPI routes across direct and included-router wrappers."""
-    for route in routes:
-        path = getattr(route, "path", None)
-        methods = getattr(route, "methods", None)
+_HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
-        if path is not None and methods:
-            yield route
 
-        nested_routes = getattr(route, "routes", None)
-        if nested_routes:
-            yield from _iter_registered_routes(nested_routes)
-            continue
+def _public_openapi_routes():
+    """Return the public HTTP method/path contract from FastAPI's OpenAPI schema.
 
-        nested_router = getattr(route, "router", None)
-        nested_router_routes = getattr(nested_router, "routes", None)
-        if nested_router_routes:
-            yield from _iter_registered_routes(nested_router_routes)
+    This deliberately avoids inspecting FastAPI/Starlette private route wrapper
+    internals. Different FastAPI versions may represent included routers
+    differently in ``app.routes``, while the generated OpenAPI document is the
+    stable public API contract consumed by clients.
+    """
+    schema = app.openapi()
+    routes = set()
+    for path, operations in schema.get("paths", {}).items():
+        for method in operations:
+            method_lower = method.lower()
+            if method_lower in _HTTP_METHODS and method_lower not in {"head", "options"}:
+                routes.add((method_lower.upper(), path))
+    return routes
 
 
 def test_phase1_route_contract_is_preserved():
-    application_routes = {
-        (method, route.path)
-        for route in _iter_registered_routes(app.routes)
-        for method in route.methods
-        if method not in {"HEAD", "OPTIONS"}
-        and route.path not in {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
-    }
+    application_routes = _public_openapi_routes()
 
     route_snapshot = PROJECT_ROOT / "docs" / "phase-1" / "routes-before.txt"
     expected = set()
