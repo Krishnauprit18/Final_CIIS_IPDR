@@ -15,6 +15,7 @@ from app.jobs.service import (
     mark_job_retrying,
     mark_job_running,
     mark_job_succeeded,
+    set_job_result,
 )
 from app.queue.sqs import (
     delete_analysis_message,
@@ -150,12 +151,14 @@ def process_message(message: dict) -> None:
             content_type="application/json",
         )
 
+        result_uri = storage_uri(result_key)
+        set_job_result(job_id, result_uri)
         mark_job_succeeded(job_id)
         delete_analysis_message(message["ReceiptHandle"])
 
         print(
             f"[worker] job={job_id} succeeded "
-            f"result={storage_uri(result_key)}"
+            f"result={result_uri}"
         )
 
     except Exception as exc:
