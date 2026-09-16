@@ -49,3 +49,42 @@ STORAGE_ACCESS_KEY = os.getenv("STORAGE_ACCESS_KEY", "ciisadmin").strip() or Non
 STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "ciisadmin123").strip() or None
 STORAGE_REGION = os.getenv("STORAGE_REGION", "us-east-1")
 STORAGE_USE_SSL = _env_bool("STORAGE_USE_SSL", default=False)
+
+# Phase 4 queue configuration.
+SQS_ENDPOINT_URL = os.getenv(
+    "SQS_ENDPOINT_URL",
+    "http://localhost:4566",
+).strip() or None
+
+SQS_REGION = os.getenv(
+    "SQS_REGION",
+    "us-east-1",
+)
+
+SQS_ACCESS_KEY = os.getenv(
+    "SQS_ACCESS_KEY",
+    "test",
+)
+
+SQS_SECRET_KEY = os.getenv(
+    "SQS_SECRET_KEY",
+    "test",
+)
+
+SQS_ANALYSIS_QUEUE_NAME = os.getenv(
+    "SQS_ANALYSIS_QUEUE_NAME",
+    "ciis-analysis",
+)
+
+SQS_ANALYSIS_DLQ_NAME = os.getenv(
+    "SQS_ANALYSIS_DLQ_NAME",
+    "ciis-analysis-dlq",
+)
+
+WORKER_POLL_SECONDS = int(
+    os.getenv("WORKER_POLL_SECONDS", "20")
+)
+
+WORKER_VISIBILITY_TIMEOUT = int(
+    os.getenv("WORKER_VISIBILITY_TIMEOUT", "900")
+)

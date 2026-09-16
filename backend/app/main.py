@@ -15,18 +15,19 @@ from app.storage.service import verify_storage
 install_legacy_postgres_compat(legacy_handlers)
 install_legacy_object_storage_compat(legacy_handlers)
 
-from app.api.routers import (  # noqa: E402
+from app.api.routers import (
     analysis,
     analytics,
     auth,
     cases,
     health,
+    jobs,
     link_analysis,
     mapping,
     maps,
     normalization,
     processing,
-    search,
+    search
 )
 
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     application.include_router(auth.router)
     application.include_router(cases.router)
     application.include_router(health.router)
+    application.include_router(jobs.router)
     application.include_router(link_analysis.router)
     application.include_router(mapping.router)
     application.include_router(maps.router)

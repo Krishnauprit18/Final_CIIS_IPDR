@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from app.db.repositories import (
+    create_job_record,
+    get_job_record,
+    update_job_status,
+)
+
+
+def create_analysis_job(
+    *,
+    case_id: int,
+    dataset_key: str,
+    case_file_key: str | None,
+) -> dict[str, Any]:
+    payload = {
+        "case_id": case_id,
+        "dataset_key": dataset_key,
+        "case_file_key": case_file_key,
+    }
+
+    return create_job_record(
+        case_id=case_id,
+        job_type="CASE_ANALYSIS",
+        payload=payload,
+    )
+
+
+def get_job(job_id: int) -> dict[str, Any] | None:
+    job = get_job_record(job_id)
+
+    if not job:
+        return None
+
+    if job.get("payload_json"):
+        job["payload"] = json.loads(job["payload_json"])
+
+    job.pop("payload_json", None)
+
+    return job
+
+
+def mark_job_running(job_id: int) -> None:
+    update_job_status(
+        job_id,
+        "RUNNING",
+    )
+
+
+def mark_job_succeeded(job_id: int) -> None:
+    update_job_status(
+        job_id,
+        "SUCCEEDED",
+    )
+
+
+def mark_job_failed(
+    job_id: int,
+    error: str,
+) -> None:
+    update_job_status(
+        job_id,
+        "FAILED",
+        error_message=error[:2000],
+    )
+
+
+def job_is_terminal(job_id: int) -> bool:
+    job = get_job_record(job_id)
+
+    if not job:
+        return True
+
+    return job["status"] in {
+        "SUCCEEDED",
+        "FAILED",
+    }
