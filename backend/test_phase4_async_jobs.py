@@ -34,9 +34,14 @@ def test_job_lifecycle(monkeypatch):
         stored["status"] = status
         stored["error_message"] = error_message
 
+    def fake_update_job_payload(job_id, payload):
+        assert job_id == 42
+        stored["payload_json"] = json.dumps(payload)
+
     monkeypatch.setattr(job_service, "create_job_record", fake_create_job_record)
     monkeypatch.setattr(job_service, "get_job_record", fake_get_job_record)
     monkeypatch.setattr(job_service, "update_job_status", fake_update_job_status)
+    monkeypatch.setattr(job_service, "update_job_payload", fake_update_job_payload)
 
     job = job_service.create_analysis_job(
         case_id=1,
@@ -51,8 +56,12 @@ def test_job_lifecycle(monkeypatch):
     job_service.mark_job_retrying(42, "temporary failure")
     assert job_service.get_job(42)["status"] == "QUEUED"
 
+    job_service.set_job_result(42, "s3://ciis-storage/analysis-results/1/42/result.json")
     job_service.mark_job_succeeded(42)
-    assert job_service.get_job(42)["status"] == "SUCCEEDED"
+
+    final_job = job_service.get_job(42)
+    assert final_job["status"] == "SUCCEEDED"
+    assert final_job["payload"]["result_uri"].endswith("/analysis-results/1/42/result.json")
     assert job_service.job_is_terminal(42) is True
 
 
@@ -140,6 +149,11 @@ def test_worker_success_acknowledges_message(monkeypatch):
     monkeypatch.setattr(analysis_worker, "get_job", lambda job_id: {"id": job_id, "status": "QUEUED"})
     monkeypatch.setattr(analysis_worker, "mark_job_running", lambda job_id: events.append(("RUNNING", job_id)))
     monkeypatch.setattr(analysis_worker, "mark_job_succeeded", lambda job_id: events.append(("SUCCEEDED", job_id)))
+    monkeypatch.setattr(
+        analysis_worker,
+        "set_job_result",
+        lambda job_id, result_uri: events.append(("RESULT", job_id, result_uri)),
+    )
     monkeypatch.setattr(analysis_worker, "download_bytes", lambda key: b"dataset")
     monkeypatch.setattr(analysis_worker, "_load_dataset", lambda data, filename: object())
     monkeypatch.setattr(analysis_worker, "_run_analysis", lambda df: {"rows": 1, "alerts": []})
@@ -171,6 +185,7 @@ def test_worker_success_acknowledges_message(monkeypatch):
     assert ("RUNNING", 9) in events
     assert ("SUCCEEDED", 9) in events
     assert ("ACK", "receipt-1") in events
+    assert any(event[0] == "RESULT" and event[1] == 9 for event in events)
     assert uploaded[0][0] == "analysis-results/1/9/result.json"
 
 
