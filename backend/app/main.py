@@ -4,8 +4,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import legacy_handlers
+from app.core.config import FRONTEND_ORIGIN
 from app.db.legacy_compat import install_legacy_postgres_compat
-from app.api.routers import (
+from app.storage.legacy_compat import install_legacy_object_storage_compat
+from app.storage.service import verify_storage
+
+# Install runtime compatibility boundaries before routers capture handler
+# callables. This preserves the public API while moving persistence to
+# PostgreSQL (Phase 2) and durable file artifacts to object storage (Phase 3).
+install_legacy_postgres_compat(legacy_handlers)
+install_legacy_object_storage_compat(legacy_handlers)
+
+from app.api.routers import (  # noqa: E402
     analysis,
     analytics,
     auth,
@@ -16,11 +26,9 @@ from app.api.routers import (
     maps,
     normalization,
     processing,
-    search
+    search,
 )
-from app.core.config import FRONTEND_ORIGIN
 
-install_legacy_postgres_compat(legacy_handlers)
 
 def create_app() -> FastAPI:
     application = FastAPI(title="CIIS IPDR Analysis API")
@@ -46,8 +54,10 @@ def create_app() -> FastAPI:
     @application.on_event("startup")
     def _startup() -> None:
         legacy_handlers.startup_event()
+        verify_storage()
 
     return application
+
 
 app = create_app()
 startup_event = legacy_handlers.startup_event
