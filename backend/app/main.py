@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
 from app.db.legacy_compat import install_legacy_postgres_compat
+from app.queue.sqs import queue_healthcheck
 from app.storage.legacy_compat import install_legacy_object_storage_compat
 from app.storage.service import verify_storage
 
@@ -27,7 +28,7 @@ from app.api.routers import (
     maps,
     normalization,
     processing,
-    search
+    search,
 )
 
 
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     def _startup() -> None:
         legacy_handlers.startup_event()
         verify_storage()
+        queue_healthcheck()
 
     return application
 
