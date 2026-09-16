@@ -11,7 +11,7 @@ from app.jobs.service import (
     mark_job_failed,
 )
 from app.queue.sqs import send_analysis_message
-from app.storage.service import upload_fileobj
+from app.storage.service import delete_object, upload_fileobj
 
 
 router = APIRouter(tags=["jobs"])
@@ -41,7 +41,6 @@ async def create_case_analysis(
         )
 
     request_id = uuid.uuid4().hex
-
     dataset_key = (
         f"analysis-inputs/{case_id}/{request_id}/"
         f"{dataset_file.filename}"
@@ -82,17 +81,26 @@ async def create_case_analysis(
                 "case_file_key": case_file_key,
             }
         )
-
     except Exception as exc:
         mark_job_failed(
             job["id"],
             f"Unable to queue job: {exc}",
-    )
+        )
 
-    raise HTTPException(
-        status_code=503,
-        detail="Unable to queue analysis job",
-    )
+        # Queueing failed, so there is no worker that can consume these inputs.
+        # Clean them up best-effort to avoid orphaned durable objects.
+        for object_key in (dataset_key, case_file_key):
+            if not object_key:
+                continue
+            try:
+                delete_object(object_key)
+            except Exception:
+                pass
+
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to queue analysis job",
+        ) from exc
 
     return {
         "job_id": job["id"],
