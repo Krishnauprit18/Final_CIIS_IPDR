@@ -4,10 +4,8 @@ import {
     Card, CardContent, IconButton, InputAdornment, Divider
 } from '@mui/material';
 import { Security, Visibility, VisibilityOff, Person, Refresh } from '@mui/icons-material';
-import axios from 'axios';
 import LogoBadge from './LogoBadge';
-
-const API_URL = 'http://localhost:8000';
+import { login } from './auth/api';
 
 interface LoginProps {
     onLogin: (user: { username: string; token: string }) => void;
@@ -46,21 +44,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                 setCaptcha(generateCaptcha());
                 return;
             }
-            const response = await axios.post(`${API_URL}/auth/login`, {
-                username,
-                password
-            });
 
-            if (response.data.success) {
-                onLogin({
-                    username: response.data.username,
-                    token: response.data.token
-                });
-            } else {
-                setError(response.data.message || 'Login failed');
-            }
+            const user = await login(username, password);
+            onLogin(user);
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Login failed. Please try again.');
+            setError(err?.response?.data?.message || err?.message || 'Login failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -101,17 +89,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                 }
             }}
         >
-            {/* Page-level top-left emblem as a separate component */}
             <LogoBadge width={150} top={12} left={12} />
             <Container maxWidth="sm" sx={{ position: 'relative' }}>
-                <Card 
-                    className="login-card" 
-                    sx={{ 
-                        width: '100%', 
-                        maxWidth: 430, 
-                        mx: 'auto', 
-                        overflow: 'hidden', 
-                        borderRadius: 3, 
+                <Card
+                    className="login-card"
+                    sx={{
+                        width: '100%',
+                        maxWidth: 430,
+                        mx: 'auto',
+                        overflow: 'hidden',
+                        borderRadius: 3,
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
                         position: 'relative',
                         background: 'linear-gradient(145deg, #1a237e 0%, #0d47a1 100%)',
@@ -121,20 +108,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                     }}
                 >
                     <CardContent sx={{ p: 4, position: 'relative' }}>
-                        {/* Right background shield icon */}
                         <Security sx={{ position: 'absolute', right: 16, top: 16, fontSize: 48, color: 'primary.light', opacity: 0.15 }} />
 
-                        {/* Top logos */}
                         <Box sx={{ textAlign: 'center', mb: 2 }}>
-                            {/* MP Police official logo placeholder */}
                             <img
                                 src="/assets/mp-police-logo.png"
                                 alt="MP Police"
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                                 style={{ width: 80, height: 'auto', objectFit: 'contain', marginBottom: 8 }}
                             />
-                            <Typography 
-                                variant="h5" 
+                            <Typography
+                                variant="h5"
                                 sx={{
                                     fontWeight: 700,
                                     color: '#ffffff',
@@ -146,9 +130,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                             >
                                 Secure Access Portal
                             </Typography>
-                            <Typography 
-                                variant="body2" 
-                                sx={{ 
+                            <Typography
+                                variant="body2"
+                                sx={{
                                     color: 'text.secondary',
                                     letterSpacing: '1px',
                                     textTransform: 'uppercase',
@@ -160,8 +144,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                         </Box>
 
                         <Divider sx={{ my: 2 }} />
-
-                        {/* Project logo area */}
                         <ProjectLogo />
 
                         <form onSubmit={handleSubmit}>
@@ -190,15 +172,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                             boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                                         }
                                     },
-                                    '& .MuiInputLabel-root': {
-                                        color: 'rgba(255, 255, 255, 0.7)'
-                                    },
-                                    '& .MuiOutlinedInput-notchedOutline': {
-                                        borderColor: 'rgba(255, 255, 255, 0.3)'
-                                    },
-                                    '& .MuiInputAdornment-root': {
-                                        color: 'rgba(255, 255, 255, 0.7)'
-                                    }
+                                    '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.7)' },
+                                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255, 255, 255, 0.3)' },
+                                    '& .MuiInputAdornment-root': { color: 'rgba(255, 255, 255, 0.7)' }
                                 }}
                                 InputProps={{
                                     startAdornment: (
@@ -229,7 +205,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 }}
                             />
 
-                            {/* Captcha row */}
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                                 <Box
                                     aria-label="captcha"
@@ -260,11 +235,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 />
                             </Box>
 
-                            {error && (
-                                <Alert severity="error" sx={{ mt: 2 }}>
-                                    {error}
-                                </Alert>
-                            )}
+                            {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
                             <Button
                                 type="submit"
@@ -272,10 +243,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                                 variant="contained"
                                 size="large"
                                 disabled={loading || !username || !password || !captchaInput}
-                                sx={{ 
-                                    mt: 3, 
-                                    mb: 1, 
-                                    py: 1.4, 
+                                sx={{
+                                    mt: 3,
+                                    mb: 1,
+                                    py: 1.4,
                                     borderRadius: '50px',
                                     background: 'linear-gradient(45deg, #64b5f6 30%, #2196f3 90%)',
                                     boxShadow: '0 3px 5px 2px rgba(33, 150, 243, .3)',
@@ -293,7 +264,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                             </Button>
                         </form>
 
-                        {/* Link to registration page */}
                         <Button color="inherit" fullWidth onClick={() => onShowRegister && onShowRegister()} sx={{ mt: 1 }}>
                             New user? Register
                         </Button>
@@ -305,20 +275,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
 };
 
 export default Login;
-// Inline component to render project logo in login page with multiple fallbacks
-const ProjectLogo: React.FC = () => {
-    return (
-        <Box className="project-logo" sx={{ mb: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img
-                src="/Logo.png"
-                alt="Project Logo"
-                style={{
-                    width: '100%',
-                    height: 200,
-                    maxWidth: 400,
-                    objectFit: 'contain'
-                }}
-            />
-        </Box>
-    );
-};
+
+const ProjectLogo: React.FC = () => (
+    <Box className="project-logo" sx={{ mb: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img
+            src="/Logo.png"
+            alt="Project Logo"
+            style={{ width: '100%', height: 200, maxWidth: 400, objectFit: 'contain' }}
+        />
+    </Box>
+);
