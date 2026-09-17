@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy import delete, select, text, update
 
-from app.db.models import AuditLog, AuthSession, Case, SavedSearch, User
+from app.db.models import AuditLog, AuthSession, Case, Job, SavedSearch, User
 from app.db.session import get_engine, session_scope
 
 EXPECTED_ALEMBIC_REVISION = "0001_initial_postgresql"
@@ -159,3 +159,64 @@ def list_saved_search_records(case_id: int) -> list[Dict[str, Any]]:
             .order_by(SavedSearch.id.desc())
         ).all()
         return [_model_to_dict(row) for row in rows]
+
+
+def create_job_record(
+    *,
+    case_id: int,
+    job_type: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    now = datetime.now()
+
+    with session_scope() as db:
+        job = Job(
+            case_id=case_id,
+            job_type=job_type,
+            status="QUEUED",
+            payload_json=json.dumps(payload),
+            error_message=None,
+            created_at=now,
+            updated_at=now,
+        )
+
+        db.add(job)
+        db.flush()
+
+        return _model_to_dict(job)
+
+
+def get_job_record(job_id: int) -> Optional[Dict[str, Any]]:
+    with session_scope() as db:
+        job = db.get(Job, job_id)
+        return _model_to_dict(job) if job else None
+
+
+def update_job_status(
+    job_id: int,
+    status: str,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    with session_scope() as db:
+        db.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                status=status,
+                error_message=error_message,
+                updated_at=datetime.now(),
+            )
+        )
+
+
+def update_job_payload(job_id: int, payload: Dict[str, Any]) -> None:
+    with session_scope() as db:
+        db.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                payload_json=json.dumps(payload),
+                updated_at=datetime.now(),
+            )
+        )
