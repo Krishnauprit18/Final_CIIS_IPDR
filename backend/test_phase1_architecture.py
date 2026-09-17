@@ -26,6 +26,7 @@ def _public_openapi_routes():
 
 
 def test_phase1_route_contract_is_preserved():
+    """All Phase 1 routes must remain available; later phases may add routes."""
     application_routes = _public_openapi_routes()
 
     route_snapshot = PROJECT_ROOT / "docs" / "phase-1" / "routes-before.txt"
@@ -37,7 +38,7 @@ def test_phase1_route_contract_is_preserved():
         path = remainder.split(" -> ", 1)[0]
         expected.add((method, path))
 
-    assert application_routes == expected
+    assert expected.issubset(application_routes)
 
 
 def test_phase1_uses_stable_dataset_path():
