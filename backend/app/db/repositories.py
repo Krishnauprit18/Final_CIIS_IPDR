@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from sqlalchemy import delete, select, text, update
@@ -9,7 +9,7 @@ from sqlalchemy import delete, select, text, update
 from app.db.models import AuditLog, AuthSession, Case, Job, SavedSearch, User
 from app.db.session import get_engine, session_scope
 
-EXPECTED_ALEMBIC_REVISION = "0001_initial_postgresql"
+EXPECTED_ALEMBIC_REVISION = "0002_phase5_job_correctness"
 
 
 def _model_to_dict(instance: Any) -> Dict[str, Any]:
@@ -37,7 +37,6 @@ def log_action(username: Optional[str], action: str, details: str = "") -> None:
                 created_at=datetime.now(),
             ))
     except Exception:
-        # Audit logging should not mask the original request failure path.
         pass
 
 
@@ -161,14 +160,8 @@ def list_saved_search_records(case_id: int) -> list[Dict[str, Any]]:
         return [_model_to_dict(row) for row in rows]
 
 
-def create_job_record(
-    *,
-    case_id: int,
-    job_type: str,
-    payload: Dict[str, Any],
-) -> Dict[str, Any]:
+def create_job_record(*, case_id: int, job_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     now = datetime.now()
-
     with session_scope() as db:
         job = Job(
             case_id=case_id,
@@ -176,13 +169,18 @@ def create_job_record(
             status="QUEUED",
             payload_json=json.dumps(payload),
             error_message=None,
+            progress=0,
+            attempt_count=0,
+            worker_id=None,
+            claim_expires_at=None,
+            started_at=None,
+            finished_at=None,
+            result_uri=None,
             created_at=now,
             updated_at=now,
         )
-
         db.add(job)
         db.flush()
-
         return _model_to_dict(job)
 
 
@@ -192,21 +190,123 @@ def get_job_record(job_id: int) -> Optional[Dict[str, Any]]:
         return _model_to_dict(job) if job else None
 
 
-def update_job_status(
-    job_id: int,
-    status: str,
-    *,
-    error_message: Optional[str] = None,
-) -> None:
+def claim_job(job_id: int, worker_id: str, *, lease_seconds: int) -> Optional[Dict[str, Any]]:
+    """Atomically claim queued work or recover an expired RUNNING lease.
+
+    PostgreSQL row locking serializes competing workers for the same job. A
+    RUNNING job with a live lease is owned by another worker and is not claimed.
+    SUCCEEDED/FAILED jobs are returned unchanged so the caller can handle an
+    at-least-once duplicate message without doing the analysis twice.
+    """
+    now = datetime.now()
+    with session_scope() as db:
+        job = db.scalar(
+            select(Job)
+            .where(Job.id == job_id)
+            .with_for_update()
+        )
+        if job is None:
+            return None
+
+        if job.status in {"SUCCEEDED", "FAILED"}:
+            return _model_to_dict(job)
+
+        if (
+            job.status == "RUNNING"
+            and job.claim_expires_at is not None
+            and job.claim_expires_at > now
+            and job.worker_id != worker_id
+        ):
+            return None
+
+        job.status = "RUNNING"
+        job.worker_id = worker_id
+        job.claim_expires_at = now + timedelta(seconds=lease_seconds)
+        job.attempt_count = int(job.attempt_count or 0) + 1
+        job.progress = max(int(job.progress or 0), 1)
+        job.error_message = None
+        job.started_at = job.started_at or now
+        job.updated_at = now
+        db.flush()
+        return _model_to_dict(job)
+
+
+def update_claimed_job_progress(job_id: int, worker_id: str, progress: int) -> bool:
+    progress = max(0, min(100, int(progress)))
+    with session_scope() as db:
+        result = db.execute(
+            update(Job)
+            .where(
+                Job.id == job_id,
+                Job.status == "RUNNING",
+                Job.worker_id == worker_id,
+            )
+            .values(progress=progress, updated_at=datetime.now())
+        )
+        return bool(result.rowcount)
+
+
+def complete_claimed_job(job_id: int, worker_id: str, result_uri: str) -> bool:
+    now = datetime.now()
+    with session_scope() as db:
+        job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None:
+            return False
+        if job.status == "SUCCEEDED":
+            return True
+        if job.status != "RUNNING" or job.worker_id != worker_id:
+            return False
+
+        job.status = "SUCCEEDED"
+        job.progress = 100
+        job.result_uri = result_uri
+        job.error_message = None
+        job.finished_at = now
+        job.worker_id = None
+        job.claim_expires_at = None
+        job.updated_at = now
+        return True
+
+
+def release_claim_for_retry(job_id: int, worker_id: str, error_message: str) -> bool:
+    now = datetime.now()
+    with session_scope() as db:
+        job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None or job.status != "RUNNING" or job.worker_id != worker_id:
+            return False
+        job.status = "QUEUED"
+        job.error_message = error_message[:2000]
+        job.worker_id = None
+        job.claim_expires_at = None
+        job.updated_at = now
+        return True
+
+
+def fail_claimed_job(job_id: int, worker_id: str, error_message: str) -> bool:
+    now = datetime.now()
+    with session_scope() as db:
+        job = db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None:
+            return False
+        if job.status == "FAILED":
+            return True
+        if job.status != "RUNNING" or job.worker_id != worker_id:
+            return False
+        job.status = "FAILED"
+        job.error_message = error_message[:2000]
+        job.finished_at = now
+        job.worker_id = None
+        job.claim_expires_at = None
+        job.updated_at = now
+        return True
+
+
+def update_job_status(job_id: int, status: str, *, error_message: Optional[str] = None) -> None:
     with session_scope() as db:
         db.execute(
             update(Job)
             .where(Job.id == job_id)
-            .values(
-                status=status,
-                error_message=error_message,
-                updated_at=datetime.now(),
-            )
+            .values(status=status, error_message=error_message, updated_at=datetime.now())
         )
 
 
@@ -215,8 +315,5 @@ def update_job_payload(job_id: int, payload: Dict[str, Any]) -> None:
         db.execute(
             update(Job)
             .where(Job.id == job_id)
-            .values(
-                payload_json=json.dumps(payload),
-                updated_at=datetime.now(),
-            )
+            .values(payload_json=json.dumps(payload), updated_at=datetime.now())
         )
