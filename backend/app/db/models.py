@@ -83,6 +83,13 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    worker_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    claim_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True, index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
+    result_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
