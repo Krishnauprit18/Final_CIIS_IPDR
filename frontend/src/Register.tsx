@@ -14,9 +14,7 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { Person, Email, Visibility, VisibilityOff, Badge, LocationOn, Shield, Refresh } from '@mui/icons-material';
-import axios from 'axios';
-
-const API_URL = 'http://localhost:8000';
+import { register } from './auth/api';
 
 interface RegisterProps {
   onRegistered: (user: { username: string; token: string }) => void;
@@ -76,19 +74,11 @@ const Register: React.FC<RegisterProps> = ({ onShowLogin }) => {
 
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/auth/register`, {
-        name,
-        email,
-        password,
-        post,
-        district,
-        thana,
-      });
-      if (res.data?.success) {
-        // After successful registration, redirect user to Login instead of auto-login
+      const data = await register({ name, email, password, post, district, thana });
+      if (data?.success) {
         onShowLogin();
       } else {
-        setInfo(res.data?.message || 'Registration submitted');
+        setInfo(data?.message || 'Registration submitted');
       }
     } catch (err: any) {
       const msg = err?.response?.data?.detail || err?.message || 'Registration failed';
