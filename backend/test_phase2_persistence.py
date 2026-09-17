@@ -18,9 +18,14 @@ def test_phase2_schema_contains_required_tables():
 
 
 def test_phase2_alembic_revision_is_present():
-    migration = Path(__file__).parent / "alembic" / "versions" / "0001_initial_postgresql.py"
-    assert migration.exists()
-    assert EXPECTED_ALEMBIC_REVISION in migration.read_text(encoding="utf-8")
+    versions_dir = Path(__file__).parent / "alembic" / "versions"
+    migrations = list(versions_dir.glob("*.py"))
+
+    assert migrations, "No Alembic migrations found"
+    assert any(
+        EXPECTED_ALEMBIC_REVISION in migration.read_text(encoding="utf-8")
+        for migration in migrations
+    ), f"Expected Alembic revision {EXPECTED_ALEMBIC_REVISION!r} was not found"
 
 
 def test_phase2_installs_postgres_compatibility_boundary():
