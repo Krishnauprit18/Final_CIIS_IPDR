@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
 from app.db.legacy_compat import install_legacy_postgres_compat
+from app.metrics import metrics_endpoint, metrics_middleware
 from app.queue.sqs import queue_healthcheck
 from app.storage.legacy_compat import install_legacy_object_storage_compat
 from app.storage.service import verify_storage
@@ -34,6 +35,7 @@ from app.api.routers import (
 
 def create_app() -> FastAPI:
     application = FastAPI(title="CIIS IPDR Analysis API")
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[FRONTEND_ORIGIN],
@@ -41,6 +43,16 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    application.middleware("http")(metrics_middleware)
+
+    application.add_api_route(
+        "/metrics",
+        metrics_endpoint,
+        methods=["GET"],
+        include_in_schema=False,
+    )
+
     application.include_router(analysis.router)
     application.include_router(analytics.router)
     application.include_router(auth.router)
