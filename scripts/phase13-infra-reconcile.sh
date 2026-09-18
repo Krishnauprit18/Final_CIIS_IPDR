@@ -16,7 +16,7 @@ docker compose -f compose.floci.yaml up -d --force-recreate
 
 echo "[2/7] Waiting for Floci"
 for _ in $(seq 1 30); do
-  if aws sts get-caller-identity >/dev/null 2>&1 || aws s3api list-buckets >/dev/null 2>&1; then
+  if aws s3api list-buckets >/dev/null 2>&1; then
     break
   fi
   sleep 2
@@ -31,25 +31,64 @@ echo "[4/7] Initializing Terraform"
 cd "$TF_DIR"
 terraform init -reconfigure
 
-import_ecr_if_needed() {
-  local address="$1"
-  local repo_name="$2"
-
-  if terraform state show "$address" >/dev/null 2>&1; then
-    echo "Terraform already manages $repo_name"
-    return
-  fi
-
-  if aws ecr describe-repositories --repository-names "$repo_name" >/dev/null 2>&1; then
-    echo "Importing existing ECR repository $repo_name"
-    terraform import "$address" "$repo_name"
-  fi
+state_has() {
+  terraform state show "$1" >/dev/null 2>&1
 }
 
-echo "[5/7] Reconciling pre-existing ECR repositories"
-import_ecr_if_needed module.ecr.aws_ecr_repository.api ciis-api
-import_ecr_if_needed module.ecr.aws_ecr_repository.worker ciis-worker
-import_ecr_if_needed module.ecr.aws_ecr_repository.web ciis-web
+import_if_missing() {
+  local address="$1"
+  local id="$2"
+  if state_has "$address"; then
+    echo "Terraform already manages $address"
+    return
+  fi
+  echo "Importing $address"
+  terraform import "$address" "$id"
+}
+
+echo "[5/7] Reconciling resources created by earlier partial applies"
+
+if aws s3api head-bucket --bucket ciis-raw-files >/dev/null 2>&1 && ! state_has module.s3.aws_s3_bucket.raw; then
+  import_if_missing module.s3.aws_s3_bucket.raw ciis-raw-files
+fi
+
+if aws s3api head-bucket --bucket ciis-results >/dev/null 2>&1 && ! state_has module.s3.aws_s3_bucket.results; then
+  import_if_missing module.s3.aws_s3_bucket.results ciis-results
+fi
+
+if aws iam get-role --role-name ciis-app-role >/dev/null 2>&1 && ! state_has module.iam.aws_iam_role.ciis_app; then
+  import_if_missing module.iam.aws_iam_role.ciis_app ciis-app-role
+fi
+
+if aws iam get-role --role-name ciis-eks-cluster-role >/dev/null 2>&1 && ! state_has module.iam.aws_iam_role.eks_cluster; then
+  import_if_missing module.iam.aws_iam_role.eks_cluster ciis-eks-cluster-role
+fi
+
+for pair in   "module.ecr.aws_ecr_repository.api:ciis-api"   "module.ecr.aws_ecr_repository.worker:ciis-worker"   "module.ecr.aws_ecr_repository.web:ciis-web"; do
+  address="${pair%%:*}"
+  repo_name="${pair#*:}"
+  if aws ecr describe-repositories --repository-names "$repo_name" >/dev/null 2>&1 && ! state_has "$address"; then
+    import_if_missing "$address" "$repo_name"
+  fi
+done
+
+if ! state_has module.sqs.aws_sqs_queue.dlq; then
+  dlq_url="$(aws sqs get-queue-url --queue-name ciis-analysis-dlq --query QueueUrl --output text 2>/dev/null || true)"
+  if [ -n "$dlq_url" ] && [ "$dlq_url" != "None" ]; then
+    import_if_missing module.sqs.aws_sqs_queue.dlq "$dlq_url"
+  fi
+fi
+
+if ! state_has module.sqs.aws_sqs_queue.jobs; then
+  jobs_url="$(aws sqs get-queue-url --queue-name ciis-analysis-jobs --query QueueUrl --output text 2>/dev/null || true)"
+  if [ -n "$jobs_url" ] && [ "$jobs_url" != "None" ]; then
+    import_if_missing module.sqs.aws_sqs_queue.jobs "$jobs_url"
+  fi
+fi
+
+if aws eks describe-cluster --name ciis-local >/dev/null 2>&1 && ! state_has module.eks.aws_eks_cluster.ciis; then
+  import_if_missing module.eks.aws_eks_cluster.ciis ciis-local
+fi
 
 echo "[6/7] Applying Terraform"
 terraform fmt -recursive
