@@ -97,6 +97,10 @@ batch_processed*.parquet
 **/docker-data/
 **/.local/
 **/.minio/
+data/floci/
+.terraform/
+*.tfstate
+*.tfstate.*
 
 # -----------------------------
 # OS and editor files
