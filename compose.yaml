@@ -1,0 +1,123 @@
+name: final_ciis_ipdr
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ciis
+      POSTGRES_USER: ciis
+      POSTGRES_PASSWORD: ciis
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ciis -d ciis"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - ciis_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ciis-backend:phase8
+    environment:
+      DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
+
+      STORAGE_BUCKET: ciis-storage
+      STORAGE_ENDPOINT_URL: http://minio:9000
+      STORAGE_ACCESS_KEY: ciisadmin
+      STORAGE_SECRET_KEY: ciisadmin123
+      STORAGE_REGION: us-east-1
+      STORAGE_USE_SSL: "false"
+
+      SQS_ENDPOINT_URL: http://floci:4566
+      SQS_REGION: us-east-1
+      SQS_ACCESS_KEY: test
+      SQS_SECRET_KEY: test
+      SQS_ANALYSIS_QUEUE_NAME: ciis-analysis
+      SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
+
+      FRONTEND_ORIGIN: http://localhost:8080
+      CIIS_ROLE: api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    
+  worker:
+    image: ciis-backend:phase8
+    command: ["python", "-m", "app.workers.analysis_worker"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
+
+      STORAGE_BUCKET: ciis-storage
+      STORAGE_ENDPOINT_URL: http://minio:9000
+      STORAGE_ACCESS_KEY: ciisadmin
+      STORAGE_SECRET_KEY: ciisadmin123
+      STORAGE_REGION: us-east-1
+      STORAGE_USE_SSL: "false"
+
+      SQS_ENDPOINT_URL: http://floci:4566
+      SQS_REGION: us-east-1
+      SQS_ACCESS_KEY: test
+      SQS_SECRET_KEY: test
+      SQS_ANALYSIS_QUEUE_NAME: ciis-analysis
+      SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
+
+      WORKER_POLL_SECONDS: "2"
+      CIIS_ROLE: worker
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_BASE_URL: /api
+    image: ciis-frontend:phase8
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  ciis_postgres_data:
+  prometheus_data:
+  grafana_data:

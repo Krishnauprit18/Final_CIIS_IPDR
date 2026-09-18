@@ -28,6 +28,9 @@ RUN python -m pip install --no-index --find-links=/wheels -r requirements.txt &&
 
 COPY --chown=ciis:ciis . .
 
+RUN mkdir -p /app/uploads && \
+    chown -R ciis:ciis /app/uploads
+
 USER 10001:10001
 
 EXPOSE 8000

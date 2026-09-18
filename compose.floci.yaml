@@ -1,0 +1,21 @@
+name: final_ciis_ipdr
+
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: ciis-floci
+
+    environment:
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_HOSTNAME: floci
+
+    ports:
+      - "4566:4566"
+
+    volumes:
+      - floci_data:/app/data
+
+    restart: unless-stopped
+
+volumes:
+  floci_data:
