@@ -17,5 +17,5 @@ module "ecr" {
 module "eks" {
   source = "../../modules/eks"
 
-  cluster_role_arn = module.iam.role_arn
+  cluster_role_arn = module.iam.eks_cluster_role_arn
 }
