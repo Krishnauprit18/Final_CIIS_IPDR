@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciis-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: ciis-api
+  template:
+    metadata:
+      labels:
+        app: ciis-api
+    spec:
+      initContainers:
+        - name: migrate
+          image: "{{ .Values.image.registry }}/{{ .Values.api.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: ciis-config
+            - secretRef:
+                name: ciis-secret
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}/{{ .Values.api.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: CIIS_ROLE
+              value: api
+          envFrom:
+            - configMapRef:
+                name: ciis-config
+            - secretRef:
+                name: ciis-secret
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+{{ toYaml .Values.api.resources | indent 12 }}
