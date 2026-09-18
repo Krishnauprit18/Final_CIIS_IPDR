@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: ciis-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # The existing frontend nginx.conf proxies to http://api:8000.
+  name: api
+spec:
+  selector:
+    app: ciis-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ciis-web
+spec:
+  selector:
+    app: ciis-web
+  ports:
+    - port: 8080
+      targetPort: 8080
