@@ -6,3 +6,9 @@ services:
     volumes:
       - ./data/floci:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_SERVICES_EKS_MOCK: "false"
+      FLOCI_SERVICES_EKS_DOCKER_NETWORK: final_ciis_ipdr_default
+      FLOCI_SERVICES_ECR_DOCKER_NETWORK: final_ciis_ipdr_default

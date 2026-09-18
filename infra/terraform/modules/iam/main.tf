@@ -16,3 +16,7 @@ resource "aws_iam_role" "ciis_app" {
 output "role_name" {
   value = aws_iam_role.ciis_app.name
 }
+
+output "role_arn" {
+  value = aws_iam_role.ciis_app.arn
+}
