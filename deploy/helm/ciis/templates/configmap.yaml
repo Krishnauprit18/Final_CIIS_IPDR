@@ -3,7 +3,6 @@ kind: ConfigMap
 metadata:
   name: ciis-config
 data:
-  DATABASE_URL: "postgresql+psycopg://{{ .Values.postgres.username }}:{{ .Values.postgres.password }}@postgres:5432/{{ .Values.postgres.database }}"
   FRONTEND_ORIGIN: {{ .Values.config.frontendOrigin | quote }}
   STORAGE_ENDPOINT_URL: {{ .Values.config.storageEndpointUrl | quote }}
   STORAGE_BUCKET: {{ .Values.config.storageBucket | quote }}
