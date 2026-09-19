@@ -7,6 +7,9 @@ from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
 from app.core.logging import configure_logging
 from app.core.request_context import request_context_middleware
+from app.observability.tracing import configure_tracing
+from app.core.logging import configure_logging
+from app.core.request_context import request_context_middleware
 from app.db.legacy_compat import install_legacy_postgres_compat
 from app.metrics import (
     metrics_endpoint,
@@ -53,6 +56,7 @@ def create_app() -> FastAPI:
     )
 
     application.middleware("http")(metrics_middleware)
+    application.middleware("http")(request_context_middleware)
     application.middleware("http")(request_context_middleware)
 
     application.add_api_route(
