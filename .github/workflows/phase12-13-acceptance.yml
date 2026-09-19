@@ -1,0 +1,63 @@
+name: Phase 12-13 Acceptance
+
+on:
+  push:
+    branches:
+      - feat/phase-12-13-ecr-eks
+    paths:
+      - 'scripts/phase12-13-*.sh'
+      - 'scripts/floci-aws.sh'
+      - 'deploy/helm/ciis/**'
+      - 'infra/terraform/**'
+      - '.github/workflows/phase12-13-acceptance.yml'
+  pull_request:
+    paths:
+      - 'scripts/phase12-13-*.sh'
+      - 'scripts/floci-aws.sh'
+      - 'deploy/helm/ciis/**'
+      - 'infra/terraform/**'
+
+jobs:
+  static-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n scripts/phase13-kube-env.sh
+          bash -n scripts/floci-aws.sh
+          bash -n scripts/phase13-infra-reconcile.sh
+          bash -n scripts/phase12-13-deploy.sh
+          bash -n scripts/phase13-verify.sh
+          bash -n scripts/phase12-13-acceptance.sh
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Helm lint and render
+        run: |
+          helm lint deploy/helm/ciis
+          helm template ciis deploy/helm/ciis --set image.tag=ci-test --set config.flociIp=172.18.0.2 >/tmp/ciis-rendered.yaml
+          grep -q 'name: ciis-api' /tmp/ciis-rendered.yaml
+          grep -q 'name: ciis-worker' /tmp/ciis-rendered.yaml
+          grep -q 'name: floci-local' /tmp/ciis-rendered.yaml
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Terraform formatting
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: Validate acceptance contract
+        run: |
+          grep -q 'STEP 19' scripts/phase12-13-acceptance.sh
+          grep -q 'STEP 20' scripts/phase12-13-acceptance.sh
+          grep -q 'STEP 21' scripts/phase12-13-acceptance.sh
+          grep -q 'STEP 22' scripts/phase12-13-acceptance.sh
+          grep -q 'WORKER_VISIBILITY_TIMEOUT=15' scripts/phase12-13-acceptance.sh
+          grep -q 'imageTag=$GIT_SHA' scripts/phase12-13-acceptance.sh
