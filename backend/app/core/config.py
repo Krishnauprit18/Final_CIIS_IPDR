@@ -36,17 +36,14 @@ def _env_bool(name: str, default: bool = False) -> bool:
 load_env_file()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://ciis:ciis@localhost:5432/ciis",
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 # Phase 3 object storage. The defaults target the local MinIO service; in
 # production, STORAGE_ENDPOINT_URL may be left empty so boto3 uses AWS S3.
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "ciis-storage")
 STORAGE_ENDPOINT_URL = os.getenv("STORAGE_ENDPOINT_URL", "http://localhost:9000").strip() or None
-STORAGE_ACCESS_KEY = os.getenv("STORAGE_ACCESS_KEY", "ciisadmin").strip() or None
-STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "ciisadmin123").strip() or None
+STORAGE_ACCESS_KEY = os.getenv("STORAGE_ACCESS_KEY", "").strip() or None
+STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "").strip() or None
 STORAGE_REGION = os.getenv("STORAGE_REGION", "us-east-1")
 STORAGE_USE_SSL = _env_bool("STORAGE_USE_SSL", default=False)
 

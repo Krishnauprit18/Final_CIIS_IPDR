@@ -40,7 +40,6 @@ postgres:
   image: postgres:16-alpine
   database: ciis
   username: ciis
-  password: ciis
   resources:
     requests:
       cpu: 50m

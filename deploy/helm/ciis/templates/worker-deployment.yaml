@@ -12,6 +12,7 @@ spec:
       labels:
         app: ciis-worker
     spec:
+      serviceAccountName: ciis-app
       containers:
         - name: worker
           image: "{{ .Values.image.registry }}/{{ .Values.worker.repository }}:{{ .Values.image.tag }}"
@@ -24,6 +25,6 @@ spec:
             - configMapRef:
                 name: ciis-config
             - secretRef:
-                name: ciis-secret
+                name: ciis-runtime-secrets
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}
