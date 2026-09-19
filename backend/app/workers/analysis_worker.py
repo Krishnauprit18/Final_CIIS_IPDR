@@ -152,7 +152,11 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
 
                 set_job_progress(job_id, worker_id, 35)
                 df = _load_dataset(dataset_bytes, dataset_filename)
-                RECORDS_PROCESSED_TOTAL.inc(len(df))
+                try:
+                    record_count = len(df)
+                except TypeError:
+                    record_count = 0
+                RECORDS_PROCESSED_TOTAL.inc(record_count)
 
                 set_job_progress(job_id, worker_id, 65)
                 result = _run_analysis(df)

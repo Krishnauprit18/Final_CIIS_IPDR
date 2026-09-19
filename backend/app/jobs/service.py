@@ -13,6 +13,7 @@ from app.db.repositories import (
     update_claimed_job_progress,
     update_job_status,
 )
+from app.metrics import record_job_submitted
 
 
 def create_analysis_job(
@@ -28,11 +29,13 @@ def create_analysis_job(
         "case_file_key": case_file_key,
         "request_id": request_id,
     }
-    return create_job_record(
+    job = create_job_record(
         case_id=case_id,
         job_type="CASE_ANALYSIS",
         payload=payload,
     )
+    record_job_submitted("CASE_ANALYSIS")
+    return job
 
 
 def get_job(job_id: int) -> dict[str, Any] | None:

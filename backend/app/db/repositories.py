@@ -4,12 +4,12 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, or_, select, text, update
 
-from app.db.models import AuditLog, AuthSession, Case, Job, SavedSearch, User
+from app.db.models import AuditLog, AuthSession, Case, CaseMembership, Job, SavedSearch, User
 from app.db.session import get_engine, session_scope
 
-EXPECTED_ALEMBIC_REVISION = "0003_phase15_auth_rbac"
+EXPECTED_ALEMBIC_REVISION = "0004_phase15_auth_rbac"
 
 
 def _model_to_dict(instance: Any) -> Dict[str, Any]:
@@ -67,6 +67,7 @@ def insert_user(user: Dict[str, Any]) -> None:
             post=profile.get("post"),
             district=profile.get("district"),
             thana=profile.get("thana"),
+            role=user.get("role", "analyst"),
             created_at=created_at,
         ))
 
@@ -113,6 +114,92 @@ def delete_session(token: str) -> None:
 def delete_sessions_for_username(username: str) -> None:
     with session_scope() as db:
         db.execute(delete(AuthSession).where(AuthSession.username == username))
+
+
+ROLE_RANK = {"viewer": 10, "analyst": 20, "owner": 30, "admin": 40}
+
+
+def get_user_role(username: str) -> str | None:
+    with session_scope() as db:
+        return db.scalar(select(User.role).where(User.username == username))
+
+
+def grant_case_membership(username: str, case_id: int, role: str = "viewer") -> None:
+    if role not in ROLE_RANK:
+        raise ValueError(f"Unknown case role: {role}")
+    with session_scope() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None or db.get(Case, case_id) is None:
+            raise KeyError("user or case not found")
+        membership = db.scalar(
+            select(CaseMembership).where(
+                CaseMembership.user_id == user.id,
+                CaseMembership.case_id == case_id,
+            )
+        )
+        if membership is None:
+            db.add(CaseMembership(
+                user_id=user.id,
+                case_id=case_id,
+                role=role,
+                created_at=datetime.now(),
+            ))
+        else:
+            membership.role = role
+
+
+def user_can_access_case(
+    username: str,
+    case_id: int,
+    minimum_role: str = "viewer",
+) -> bool:
+    required_rank = ROLE_RANK.get(minimum_role)
+    if required_rank is None:
+        raise ValueError(f"Unknown case role: {minimum_role}")
+
+    with session_scope() as db:
+        case = db.get(Case, case_id)
+        if case is None:
+            return False
+        if case.created_by == username:
+            return True
+
+        user = db.scalar(select(User).where(User.username == username))
+        if user is None:
+            return False
+        membership = db.scalar(
+            select(CaseMembership).where(
+                CaseMembership.user_id == user.id,
+                CaseMembership.case_id == case_id,
+            )
+        )
+        return bool(
+            membership
+            and ROLE_RANK.get(membership.role, 0) >= required_rank
+        )
+
+
+def list_case_records_for_user(username: str) -> list[Dict[str, Any]]:
+    with session_scope() as db:
+        user_id = db.scalar(select(User.id).where(User.username == username))
+        query = select(Case).where(Case.created_by == username)
+        if user_id is not None:
+            query = (
+                select(Case)
+                .outerjoin(
+                    CaseMembership,
+                    CaseMembership.case_id == Case.id,
+                )
+                .where(
+                    or_(
+                        Case.created_by == username,
+                        CaseMembership.user_id == user_id,
+                    )
+                )
+                .distinct()
+            )
+        rows = db.scalars(query.order_by(Case.id.desc())).all()
+        return [_model_to_dict(row) for row in rows]
 
 
 def create_case_record(name: str, created_by: Optional[str]) -> int:

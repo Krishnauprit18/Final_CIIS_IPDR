@@ -52,7 +52,10 @@ def test_phase3_main_installs_storage_before_router_imports():
     install_at = source.index("install_legacy_object_storage_compat(legacy_handlers)")
     routers_at = source.index("from app.api.routers import")
     assert install_at < routers_at
-    assert "verify_storage()" in source
+    health = (
+        Path(__file__).parent / "app" / "health" / "service.py"
+    ).read_text(encoding="utf-8")
+    assert "verify_storage" in health
 
 
 def test_phase3_minio_compose_bootstraps_private_bucket():

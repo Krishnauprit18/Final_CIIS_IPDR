@@ -26,7 +26,12 @@ class S3StorageBackend(StorageBackend):
             "endpoint_url": endpoint_url,
             "region_name": region_name,
             "use_ssl": use_ssl,
-            "config": Config(signature_version="s3v4"),
+            "config": Config(
+                signature_version="s3v4",
+                connect_timeout=3,
+                read_timeout=3,
+                retries={"max_attempts": 1, "mode": "standard"},
+            ),
         }
         if access_key:
             client_kwargs["aws_access_key_id"] = access_key
