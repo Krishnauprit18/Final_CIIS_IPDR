@@ -273,3 +273,15 @@ def list_case_memberships(case_id: int) -> list[dict[str, Any]]:
             }
             for membership, user in rows
         ]
+
+
+def is_refresh_session_active(session_id: str, user_id: int) -> bool:
+    now = datetime.utcnow()
+    with session_scope() as db:
+        row = db.get(RefreshSession, session_id)
+        return bool(
+            row
+            and row.user_id == user_id
+            and row.revoked_at is None
+            and row.expires_at > now
+        )
