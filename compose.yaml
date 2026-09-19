@@ -22,27 +22,24 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ciis-backend:phase8
+    image: ciis-backend:phase16
     environment:
       DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
-
       STORAGE_BUCKET: ciis-storage
       STORAGE_ENDPOINT_URL: http://minio:9000
       STORAGE_ACCESS_KEY: ciisadmin
       STORAGE_SECRET_KEY: ciisadmin123
       STORAGE_REGION: us-east-1
       STORAGE_USE_SSL: "false"
-
       SQS_ENDPOINT_URL: http://floci:4566
       SQS_REGION: us-east-1
       SQS_ACCESS_KEY: test
       SQS_SECRET_KEY: test
       SQS_ANALYSIS_QUEUE_NAME: ciis-analysis
       SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
-
       FRONTEND_ORIGIN: http://localhost:8080
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       CIIS_ROLE: api
+      METRICS_COLLECTION_SECONDS: "15"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "8000:8000"
@@ -50,37 +47,34 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    
+
   worker:
-    image: ciis-backend:phase8
+    image: ciis-backend:phase16
     command: ["python", "-m", "app.workers.analysis_worker"]
     environment:
       DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
-
       STORAGE_BUCKET: ciis-storage
       STORAGE_ENDPOINT_URL: http://minio:9000
       STORAGE_ACCESS_KEY: ciisadmin
       STORAGE_SECRET_KEY: ciisadmin123
       STORAGE_REGION: us-east-1
       STORAGE_USE_SSL: "false"
-
       SQS_ENDPOINT_URL: http://floci:4566
       SQS_REGION: us-east-1
       SQS_ACCESS_KEY: test
       SQS_SECRET_KEY: test
       SQS_ANALYSIS_QUEUE_NAME: ciis-analysis
       SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
-
       WORKER_POLL_SECONDS: "2"
       WORKER_METRICS_PORT: "9101"
+      METRICS_COLLECTION_SECONDS: "15"
       CIIS_ROLE: worker
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-
+    ports:
+      - "9101:9101"
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "9101:9101"
     restart: unless-stopped
 
   frontend:
@@ -89,7 +83,7 @@ services:
       dockerfile: Dockerfile
       args:
         REACT_APP_API_BASE_URL: /api
-    image: ciis-frontend:phase8
+    image: ciis-frontend:phase16
     ports:
       - "8080:8080"
     depends_on:
@@ -105,18 +99,8 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-
-
-  jaeger:
-    image: jaegertracing/all-in-one:1.62.0
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"
-      - "4318:4318"
+      - api
+      - worker
     restart: unless-stopped
 
   grafana:
@@ -126,8 +110,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
