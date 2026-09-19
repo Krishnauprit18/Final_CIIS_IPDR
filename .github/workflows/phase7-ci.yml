@@ -50,6 +50,8 @@ jobs:
 
       - name: Backend migration and tests
         working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://ciis:ciis@127.0.0.1:5432/ciis
         run: |
           alembic upgrade head
           alembic current
