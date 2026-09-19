@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from app.auth import repository as auth_repository
 from app.auth.dependencies import current_user
 from app.auth.permissions import CASE_EDIT_ROLES, require_case_access, require_case_role
+from app.core.context import request_id_var
 from app.db.repositories import get_case_record
+from app.metrics import FILES_UPLOADED_TOTAL
 from app.jobs.service import (
     create_analysis_job,
     get_job,
@@ -46,7 +48,7 @@ async def create_case_analysis(
             detail="Dataset file is required",
         )
 
-    request_id = uuid.uuid4().hex
+    request_id = request_id_var.get() or uuid.uuid4().hex
     dataset_key = (
         f"analysis-inputs/{case_id}/{request_id}/"
         f"{dataset_file.filename}"
@@ -72,10 +74,15 @@ async def create_case_analysis(
             content_type=case_file.content_type,
         )
 
+    FILES_UPLOADED_TOTAL.inc()
+    if case_file_key:
+        FILES_UPLOADED_TOTAL.inc()
+
     job = create_analysis_job(
         case_id=case_id,
         dataset_key=dataset_key,
         case_file_key=case_file_key,
+        request_id=request_id,
     )
 
     try:
@@ -85,6 +92,7 @@ async def create_case_analysis(
                 "case_id": case_id,
                 "dataset_key": dataset_key,
                 "case_file_key": case_file_key,
+                "request_id": request_id,
             }
         )
     except Exception as exc:
