@@ -10,8 +10,8 @@ _PASSWORD_HASHER = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
-    if len(password) < 12:
-        raise ValueError("Password must be at least 12 characters")
+    if not password:
+        raise ValueError("Password must not be empty")
     return _PASSWORD_HASHER.hash(password)
 
 
