@@ -31,3 +31,15 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ciis-worker-metrics
+spec:
+  selector:
+    app: ciis-worker
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: 9101
