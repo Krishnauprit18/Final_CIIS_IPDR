@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciis-worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app: ciis-worker
+  template:
+    metadata:
+      labels:
+        app: ciis-worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.registry }}/{{ .Values.worker.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "app.workers.analysis_worker"]
+          env:
+            - name: CIIS_ROLE
+              value: worker
+          envFrom:
+            - configMapRef:
+                name: ciis-config
+            - secretRef:
+                name: ciis-secret
+          resources:
+{{ toYaml .Values.worker.resources | indent 12 }}

@@ -1,0 +1,62 @@
+image:
+  registry: 000000000000.dkr.ecr.us-east-1.localhost:4566
+  tag: dev
+  pullPolicy: IfNotPresent
+
+api:
+  repository: ciis-api
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+worker:
+  repository: ciis-worker
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+frontend:
+  repository: ciis-web
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+postgres:
+  image: postgres:16-alpine
+  database: ciis
+  username: ciis
+  password: ciis
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+config:
+  frontendOrigin: http://localhost:8088
+  flociIp: 127.0.0.1
+  storageEndpointUrl: http://floci-local:4566
+  storageBucket: ciis-raw-files
+  storageRegion: us-east-1
+  sqsEndpointUrl: http://floci-local:4566
+  sqsRegion: us-east-1
+  sqsQueueName: ciis-analysis-jobs
+  sqsDlqName: ciis-analysis-dlq
+  workerPollSeconds: "2"
