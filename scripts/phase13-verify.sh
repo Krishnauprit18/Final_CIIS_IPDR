@@ -30,12 +30,12 @@ kubectl run ciis-web-smoke --rm -i --restart=Never \
   --command -- curl -fsS http://ciis-web:8080/healthz
 
 echo "[6/8] Verifying Floci S3"
-scripts/floci-aws.sh s3api head-bucket --bucket ciis-raw-files
-scripts/floci-aws.sh s3api head-bucket --bucket ciis-results
+bash scripts/floci-aws.sh s3api head-bucket --bucket ciis-raw-files
+bash scripts/floci-aws.sh s3api head-bucket --bucket ciis-results
 
 echo "[7/8] Verifying Floci SQS + DLQ"
-QUEUE_URL="$(scripts/floci-aws.sh sqs get-queue-url --queue-name ciis-analysis-jobs --query QueueUrl --output text)"
-scripts/floci-aws.sh sqs get-queue-attributes \
+QUEUE_URL="$(bash scripts/floci-aws.sh sqs get-queue-url --queue-name ciis-analysis-jobs --query QueueUrl --output text)"
+bash scripts/floci-aws.sh sqs get-queue-attributes \
   --queue-url "$QUEUE_URL" \
   --attribute-names RedrivePolicy QueueArn
 
