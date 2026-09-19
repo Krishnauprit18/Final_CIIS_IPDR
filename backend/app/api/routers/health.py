@@ -1,10 +1,30 @@
-"""Phase 1 API router.
+from __future__ import annotations
 
-Routes are organized by domain while preserving the existing handler behavior.
-"""
 from fastapi import APIRouter
-from app import legacy_handlers as handlers
+from fastapi.responses import JSONResponse
+
+from app.health.service import readiness_status
 
 router = APIRouter(tags=["health"])
 
-router.add_api_route('/', handlers.read_root, methods=['GET'], name='read_root')
+
+@router.get("/")
+def root():
+    return {"message": "IPDR Analysis Backend is running."}
+
+
+@router.get("/health/live")
+def live():
+    return {"status": "ok"}
+
+
+@router.get("/health/ready")
+def ready():
+    is_ready, dependencies = readiness_status()
+    payload = {
+        "status": "ready" if is_ready else "not_ready",
+        "dependencies": dependencies,
+    }
+    if is_ready:
+        return payload
+    return JSONResponse(status_code=503, content=payload)
