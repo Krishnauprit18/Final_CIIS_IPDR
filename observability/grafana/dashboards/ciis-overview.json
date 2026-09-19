@@ -1,0 +1,59 @@
+{
+  "title": "CIIS Overview",
+  "uid": "ciis-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP request rate",
+      "targets": [
+        {"expr": "sum(rate(ciis_http_requests_total[1m])) by (route, status)", "refId": "A"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP p95 latency",
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(ciis_http_request_duration_seconds_bucket[5m])) by (le, route))", "refId": "A"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis jobs",
+      "targets": [
+        {"expr": "sum(rate(ciis_analysis_jobs_total[5m])) by (status)", "refId": "A"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue depth and in-flight",
+      "targets": [
+        {"expr": "ciis_sqs_queue_depth", "legendFormat": "visible", "refId": "A"},
+        {"expr": "ciis_sqs_messages_inflight", "legendFormat": "inflight", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Records processed",
+      "targets": [
+        {"expr": "rate(ciis_records_processed_total[5m])", "refId": "A"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "type": "timeseries",
+      "title": "DB pool usage",
+      "targets": [
+        {"expr": "ciis_db_pool_checked_out", "legendFormat": "checked out", "refId": "A"},
+        {"expr": "ciis_db_pool_size", "legendFormat": "pool size", "refId": "B"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+    }
+  ]
+}
