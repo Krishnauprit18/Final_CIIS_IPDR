@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import socket
 import tempfile
@@ -12,15 +11,8 @@ from pathlib import Path
 import pandas as pd
 
 from app.core.config import WORKER_POLL_SECONDS, WORKER_VISIBILITY_TIMEOUT
-from app.core.logging import configure_logging
-from app.workers.health import touch_worker_heartbeat
-from app.metrics import (
-    record_job_finished,
-    record_records_processed,
-    reset_job_context,
-    set_job_context,
-    set_worker_active,
-)
+from app.core.context import case_id_var, job_id_var, request_id_var
+from app.core.logging import configure_logging, get_logger
 from app.jobs.service import (
     claim_analysis_job,
     complete_job,
@@ -28,6 +20,15 @@ from app.jobs.service import (
     retry_job,
     set_job_progress,
 )
+from app.metrics import (
+    ACTIVE_WORKERS,
+    ANALYSIS_JOB_DURATION_SECONDS,
+    ANALYSIS_JOB_FAILURES_TOTAL,
+    ANALYSIS_JOBS_TOTAL,
+    RECORDS_PROCESSED_TOTAL,
+    start_worker_metrics_server,
+)
+from app.observability.tracing import configure_worker_tracing, get_tracer
 from app.queue.sqs import delete_analysis_message, receive_analysis_messages
 from app.storage.service import download_bytes, storage_uri, upload_bytes
 from app.services.communication_mapping import CommunicationMapper
@@ -37,7 +38,7 @@ from app.services.suspicious_activity_detector import SuspiciousActivityDetector
 
 MAX_RECEIVE_COUNT = 3
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _write_temp_file(data: bytes, suffix: str = ".csv") -> Path:
@@ -86,123 +87,163 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
     body = json.loads(message["Body"])
     job_id = int(body["job_id"])
     case_id = int(body["case_id"])
+    request_id = str(body.get("request_id") or "")
     dataset_key = body["dataset_key"]
     dataset_filename = dataset_key.rsplit("/", 1)[-1]
-    receive_count = int(message.get("Attributes", {}).get("ApproximateReceiveCount", "1"))
-
-    logger.info(
-        "job_received",
-        extra={"event": "job_received", "worker_id": worker_id},
+    receive_count = int(
+        message.get("Attributes", {}).get("ApproximateReceiveCount", "1")
     )
 
-    claimed = claim_analysis_job(
-        job_id,
-        worker_id,
-        lease_seconds=WORKER_VISIBILITY_TIMEOUT,
-    )
+    request_token = request_id_var.set(request_id or None)
+    job_token = job_id_var.set(str(job_id))
+    case_token = case_id_var.set(str(case_id))
+    started = time.perf_counter()
+    tracer = get_tracer(__name__)
 
-    if claimed is None:
-        # Either the job is missing or another worker owns a live lease. Do not
-        # acknowledge; SQS will redeliver after visibility timeout.
-        logger.info("job_not_claimable", extra={"event": "job_not_claimable"})
-        return
-
-    if claimed["status"] == "SUCCEEDED":
-        # Crash-after-DB-commit-before-SQS-ack: the duplicate is safe to ack.
-        logger.info("job_duplicate_succeeded", extra={"event": "job_duplicate_succeeded"})
-        delete_analysis_message(message["ReceiptHandle"])
-        return
-
-    if claimed["status"] == "FAILED":
-        # Failed jobs must remain eligible for SQS redrive to the DLQ.
-        logger.info("job_already_failed", extra={"event": "job_already_failed"})
-        return
-
-    job_started = time.perf_counter()
-    context_tokens = set_job_context(job_id, case_id)
     try:
-        set_job_progress(job_id, worker_id, 10)
-        dataset_bytes = download_bytes(dataset_key)
-
-        set_job_progress(job_id, worker_id, 35)
-        df = _load_dataset(dataset_bytes, dataset_filename)
-        try:
-            record_records_processed(len(df))
-        except TypeError:
-            # Keep compatibility with lightweight worker unit-test doubles;
-            # production datasets are always sized DataFrames.
-            pass
-
-        set_job_progress(job_id, worker_id, 65)
-        result = _run_analysis(df)
-
-        result_payload = {
-            "job_id": job_id,
-            "case_id": case_id,
-            "status": "SUCCEEDED",
-            "analysis": result,
-        }
-        result_key = f"analysis-results/{case_id}/{job_id}/result.json"
-
-        set_job_progress(job_id, worker_id, 90)
-        upload_bytes(
-            json.dumps(result_payload, default=str, indent=2).encode("utf-8"),
-            result_key,
-            content_type="application/json",
+        ANALYSIS_JOBS_TOTAL.labels(status="received").inc()
+        logger.info(
+            "analysis job received",
+            extra={
+                "event": "job_received",
+                "receive_count": receive_count,
+                "worker_id": worker_id,
+            },
         )
-        result_uri = storage_uri(result_key)
 
-        # DB completion happens before SQS acknowledgement. If the process dies
-        # after this commit but before delete_message, a duplicate delivery sees
-        # SUCCEEDED and acknowledges without repeating analysis.
-        if not complete_job(job_id, worker_id, result_uri):
-            raise RuntimeError(f"Lost claim while completing job {job_id}")
+        with tracer.start_as_current_span("ciis.analysis_job") as span:
+            span.set_attribute("ciis.job_id", job_id)
+            span.set_attribute("ciis.case_id", case_id)
+            span.set_attribute("ciis.receive_count", receive_count)
 
-        delete_analysis_message(message["ReceiptHandle"])
-        record_job_finished("CASE_ANALYSIS", "succeeded", time.perf_counter() - job_started)
-        logger.info("job_succeeded", extra={"event": "job_succeeded", "worker_id": worker_id})
+            claimed = claim_analysis_job(
+                job_id,
+                worker_id,
+                lease_seconds=WORKER_VISIBILITY_TIMEOUT,
+            )
 
-    except Exception as exc:
-        record_job_finished("CASE_ANALYSIS", "failed", time.perf_counter() - job_started)
-        logger.exception("job_failed", extra={"event": "job_failed", "worker_id": worker_id})
+            if claimed is None:
+                logger.info(
+                    "analysis job not claimable",
+                    extra={"event": "job_not_claimable", "worker_id": worker_id},
+                )
+                return
 
-        if receive_count >= MAX_RECEIVE_COUNT:
-            fail_job(job_id, worker_id, str(exc))
-        else:
-            retry_job(job_id, worker_id, str(exc))
+            if claimed["status"] == "SUCCEEDED":
+                delete_analysis_message(message["ReceiptHandle"])
+                ANALYSIS_JOBS_TOTAL.labels(status="duplicate_ack").inc()
+                logger.info(
+                    "duplicate successful job acknowledged",
+                    extra={"event": "job_duplicate_ack"},
+                )
+                return
 
-        # Never acknowledge a failed attempt. Visibility timeout provides retry;
-        # the queue redrive policy moves the third failed delivery to the DLQ.
-        raise
+            if claimed["status"] == "FAILED":
+                logger.info(
+                    "failed job left for DLQ redrive",
+                    extra={"event": "job_failed_redrive"},
+                )
+                return
+
+            try:
+                set_job_progress(job_id, worker_id, 10)
+                dataset_bytes = download_bytes(dataset_key)
+
+                set_job_progress(job_id, worker_id, 35)
+                df = _load_dataset(dataset_bytes, dataset_filename)
+                try:
+                    record_count = len(df)
+                except TypeError:
+                    record_count = 0
+                RECORDS_PROCESSED_TOTAL.inc(record_count)
+
+                set_job_progress(job_id, worker_id, 65)
+                result = _run_analysis(df)
+
+                result_payload = {
+                    "job_id": job_id,
+                    "case_id": case_id,
+                    "request_id": request_id or None,
+                    "status": "SUCCEEDED",
+                    "analysis": result,
+                }
+                result_key = f"analysis-results/{case_id}/{job_id}/result.json"
+
+                set_job_progress(job_id, worker_id, 90)
+                upload_bytes(
+                    json.dumps(result_payload, default=str, indent=2).encode("utf-8"),
+                    result_key,
+                    content_type="application/json",
+                )
+                result_uri = storage_uri(result_key)
+
+                if not complete_job(job_id, worker_id, result_uri):
+                    raise RuntimeError(f"Lost claim while completing job {job_id}")
+
+                delete_analysis_message(message["ReceiptHandle"])
+                ANALYSIS_JOBS_TOTAL.labels(status="succeeded").inc()
+                logger.info(
+                    "analysis job succeeded",
+                    extra={"event": "job_succeeded", "result_uri": result_uri},
+                )
+
+            except Exception as exc:
+                ANALYSIS_JOB_FAILURES_TOTAL.inc()
+                ANALYSIS_JOBS_TOTAL.labels(status="attempt_failed").inc()
+                logger.exception(
+                    "analysis job attempt failed",
+                    extra={
+                        "event": "job_failed",
+                        "receive_count": receive_count,
+                    },
+                )
+
+                if receive_count >= MAX_RECEIVE_COUNT:
+                    fail_job(job_id, worker_id, str(exc))
+                else:
+                    retry_job(job_id, worker_id, str(exc))
+                raise
     finally:
-        reset_job_context(context_tokens)
+        ANALYSIS_JOB_DURATION_SECONDS.observe(time.perf_counter() - started)
+        case_id_var.reset(case_token)
+        job_id_var.reset(job_token)
+        request_id_var.reset(request_token)
 
 
 def run_worker() -> None:
     configure_logging()
-    touch_worker_heartbeat()
-    set_worker_active(True)
-    logger.info("worker_started", extra={"event": "worker_started", "worker_id": WORKER_ID})
+    configure_worker_tracing()
+    start_worker_metrics_server()
+    ACTIVE_WORKERS.inc()
 
-    while True:
-        try:
-            touch_worker_heartbeat()
-            messages = receive_analysis_messages(
-                wait_time_seconds=WORKER_POLL_SECONDS,
-                max_messages=1,
-            )
-            for message in messages:
-                try:
-                    process_message(message)
-                except Exception:
-                    pass
-        except KeyboardInterrupt:
-            logger.info("worker_shutdown", extra={"event": "worker_shutdown", "worker_id": WORKER_ID})
-            break
-        except Exception as exc:
-            logger.exception("queue_error", extra={"event": "queue_error", "worker_id": WORKER_ID})
-            time.sleep(5)
-    set_worker_active(False)
+    logger.info(
+        "CIIS analysis worker started",
+        extra={"event": "worker_started", "worker_id": WORKER_ID},
+    )
+
+    try:
+        while True:
+            try:
+                messages = receive_analysis_messages(
+                    wait_time_seconds=WORKER_POLL_SECONDS,
+                    max_messages=1,
+                )
+                for message in messages:
+                    try:
+                        process_message(message)
+                    except Exception:
+                        pass
+            except KeyboardInterrupt:
+                logger.info("worker shutting down", extra={"event": "worker_shutdown"})
+                break
+            except Exception:
+                logger.exception(
+                    "worker queue error",
+                    extra={"event": "queue_error"},
+                )
+                time.sleep(5)
+    finally:
+        ACTIVE_WORKERS.dec()
 
 
 if __name__ == "__main__":

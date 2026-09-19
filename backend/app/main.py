@@ -6,8 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
 from app.core.logging import configure_logging
+from app.core.request_context import request_context_middleware
 from app.db.legacy_compat import install_legacy_postgres_compat
-from app.metrics import metrics_endpoint, metrics_middleware
+from app.metrics import (
+    metrics_endpoint,
+    metrics_middleware,
+    start_background_metrics_collector,
+)
+from app.observability.tracing import configure_tracing
 from app.queue.sqs import queue_healthcheck
 from app.storage.legacy_compat import install_legacy_object_storage_compat
 from app.storage.service import verify_storage
@@ -47,6 +53,7 @@ def create_app() -> FastAPI:
     )
 
     application.middleware("http")(metrics_middleware)
+    application.middleware("http")(request_context_middleware)
 
     application.add_api_route(
         "/metrics",
@@ -68,34 +75,14 @@ def create_app() -> FastAPI:
     application.include_router(processing.router)
     application.include_router(search.router)
 
+    configure_tracing(application)
+
     @application.on_event("startup")
     def _startup() -> None:
-        # Dependency outages should make readiness fail, not prevent the
-        # process from exposing liveness and diagnostic endpoints.
-        import logging
-
-        logger = logging.getLogger(__name__)
-
-        def log_startup_failure() -> None:
-            logger.exception(
-                "startup_dependency_unavailable",
-                extra={"event": "startup_dependency_unavailable"},
-            )
-
-        try:
-            legacy_handlers.startup_event()
-        except Exception:
-            log_startup_failure()
-
-        try:
-            verify_storage()
-        except Exception:
-            log_startup_failure()
-
-        try:
-            queue_healthcheck()
-        except Exception:
-            log_startup_failure()
+        legacy_handlers.startup_event()
+        verify_storage()
+        queue_healthcheck()
+        start_background_metrics_collector()
 
     return application
 

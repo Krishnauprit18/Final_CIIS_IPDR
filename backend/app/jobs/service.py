@@ -16,11 +16,18 @@ from app.db.repositories import (
 from app.metrics import record_job_submitted
 
 
-def create_analysis_job(*, case_id: int, dataset_key: str, case_file_key: str | None) -> dict[str, Any]:
+def create_analysis_job(
+    *,
+    case_id: int,
+    dataset_key: str,
+    case_file_key: str | None,
+    request_id: str | None = None,
+) -> dict[str, Any]:
     payload = {
         "case_id": case_id,
         "dataset_key": dataset_key,
         "case_file_key": case_file_key,
+        "request_id": request_id,
     }
     job = create_job_record(
         case_id=case_id,

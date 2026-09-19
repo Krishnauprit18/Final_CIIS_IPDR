@@ -1,26 +1,33 @@
 from __future__ import annotations
 
-from contextvars import ContextVar
-from typing import Optional
+import re
+import uuid
+
+from fastapi import Request
+
+from app.core.context import request_id_var
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 
-request_id_context: ContextVar[Optional[str]] = ContextVar(
-    "ciis_request_id",
-    default=None,
-)
-job_id_context: ContextVar[Optional[str]] = ContextVar(
-    "ciis_job_id",
-    default=None,
-)
-case_id_context: ContextVar[Optional[str]] = ContextVar(
-    "ciis_case_id",
-    default=None,
-)
+async def request_context_middleware(request: Request, call_next):
+    incoming = request.headers.get("X-Request-ID", "").strip()
+    request_id = (
+        incoming
+        if incoming and _REQUEST_ID_PATTERN.fullmatch(incoming)
+        else uuid.uuid4().hex
+    )
+    token = request_id_var.set(request_id)
 
-
-def context_values() -> dict[str, Optional[str]]:
-    return {
-        "request_id": request_id_context.get(),
-        "job_id": job_id_context.get(),
-        "case_id": case_id_context.get(),
-    }
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "request completed",
+            extra={"event": "http_request_completed"},
+        )
+        return response
+    finally:
+        request_id_var.reset(token)

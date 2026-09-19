@@ -16,3 +16,5 @@ data:
   SQS_ANALYSIS_DLQ_NAME: {{ .Values.config.sqsDlqName | quote }}
 
   WORKER_POLL_SECONDS: {{ .Values.config.workerPollSeconds | quote }}
+  METRICS_COLLECTION_SECONDS: {{ .Values.config.metricsCollectionSeconds | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelEndpoint | quote }}

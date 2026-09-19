@@ -2,43 +2,61 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
+import os
 from datetime import datetime, timezone
+from typing import Any
 
-from app.core.request_context import context_values
+from app.core.context import case_id_var, job_id_var, request_id_var
 
 
 class JsonFormatter(logging.Formatter):
-    """Small dependency-free JSON formatter safe for container log shipping."""
-
     def format(self, record: logging.LogRecord) -> str:
-        payload = {
+        payload: dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
+            "service": os.getenv("CIIS_ROLE", "api"),
             "logger": record.name,
             "message": record.getMessage(),
-            **{key: value for key, value in context_values().items() if value},
         }
 
-        for key in ("event", "method", "path", "status", "duration_ms", "worker_id"):
-            value = getattr(record, key, None)
+        for key, value in (
+            ("request_id", request_id_var.get()),
+            ("job_id", job_id_var.get()),
+            ("case_id", case_id_var.get()),
+        ):
             if value is not None:
+                payload[key] = value
+
+        event = getattr(record, "event", None)
+        if event:
+            payload["event"] = event
+
+        reserved = {
+            "name", "msg", "args", "levelname", "levelno", "pathname",
+            "filename", "module", "exc_info", "exc_text", "stack_info",
+            "lineno", "funcName", "created", "msecs", "relativeCreated",
+            "thread", "threadName", "processName", "process", "message",
+            "event",
+        }
+        for key, value in record.__dict__.items():
+            if key not in reserved and not key.startswith("_"):
                 payload[key] = value
 
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(payload, default=str, separators=(",", ":"))
+        return json.dumps(payload, separators=(",", ":"), default=str)
 
 
 def configure_logging() -> None:
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
-    if not root.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        root.addHandler(handler)
 
-    formatter = JsonFormatter()
-    for handler in root.handlers:
-        handler.setFormatter(formatter)
+def get_logger(name: str) -> logging.Logger:
+    return logging.getLogger(name)

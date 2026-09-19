@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import logging
+import os
+import threading
 import time
-import uuid
-from contextvars import Token
 
 from fastapi import Request, Response
 from prometheus_client import (
@@ -12,149 +11,162 @@ from prometheus_client import (
     Gauge,
     Histogram,
     generate_latest,
+    start_http_server,
 )
-
-from app.core.request_context import case_id_context, job_id_context, request_id_context
-
-
-logger = logging.getLogger(__name__)
 
 HTTP_REQUESTS_TOTAL = Counter(
     "ciis_http_requests_total",
     "Total HTTP requests processed by the API",
-    ["method", "path", "status"],
+    ["method", "route", "status"],
 )
 
 HTTP_REQUEST_DURATION_SECONDS = Histogram(
     "ciis_http_request_duration_seconds",
     "HTTP request latency in seconds",
-    ["method", "path"],
+    ["method", "route"],
 )
 
 ANALYSIS_JOBS_TOTAL = Counter(
     "ciis_analysis_jobs_total",
-    "Analysis jobs observed by lifecycle status",
-    ["job_type", "status"],
+    "Analysis jobs by terminal outcome",
+    ["status"],
 )
+
 ANALYSIS_JOB_DURATION_SECONDS = Histogram(
     "ciis_analysis_job_duration_seconds",
-    "Analysis job execution duration in seconds",
-    ["job_type"],
+    "Analysis job processing duration in seconds",
 )
+
+ANALYSIS_JOB_FAILURES_TOTAL = Counter(
+    "ciis_analysis_job_failures_total",
+    "Total failed analysis attempts",
+)
+
 FILES_UPLOADED_TOTAL = Counter(
     "ciis_files_uploaded_total",
-    "Files accepted into durable analysis storage",
-    ["kind"],
+    "Total files uploaded for asynchronous analysis",
 )
+
 RECORDS_PROCESSED_TOTAL = Counter(
     "ciis_records_processed_total",
-    "Normalized records processed by analysis workers",
+    "Total normalized records processed by workers",
 )
-WORKERS_ACTIVE = Gauge(
-    "ciis_workers_active",
-    "Whether this worker process is active",
+
+ACTIVE_WORKERS = Gauge(
+    "ciis_active_workers",
+    "Active CIIS worker processes",
 )
+
 SQS_QUEUE_DEPTH = Gauge(
     "ciis_sqs_queue_depth",
-    "Approximate messages in the analysis queue",
-    ["queue", "state"],
+    "Approximate number of visible analysis messages",
 )
 
+SQS_MESSAGES_INFLIGHT = Gauge(
+    "ciis_sqs_messages_inflight",
+    "Approximate number of in-flight analysis messages",
+)
 
-def set_job_context(job_id: int, case_id: int) -> tuple[Token, Token]:
-    return (
-        job_id_context.set(str(job_id)),
-        case_id_context.set(str(case_id)),
-    )
+DB_POOL_CHECKED_OUT = Gauge(
+    "ciis_db_pool_checked_out",
+    "Checked-out SQLAlchemy connections",
+)
+
+DB_POOL_SIZE = Gauge(
+    "ciis_db_pool_size",
+    "Configured SQLAlchemy connection pool size",
+)
+
+_collector_started = False
+_collector_lock = threading.Lock()
 
 
-def reset_job_context(tokens: tuple[Token, Token]) -> None:
-    job_token, case_token = tokens
-    job_id_context.reset(job_token)
-    case_id_context.reset(case_token)
+def _route_label(request: Request) -> str:
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    return str(template) if template else "unmatched"
 
 
 def record_job_submitted(job_type: str) -> None:
-    ANALYSIS_JOBS_TOTAL.labels(job_type=job_type, status="submitted").inc()
+    ANALYSIS_JOBS_TOTAL.labels(status="submitted").inc()
 
 
 def record_job_finished(job_type: str, status: str, duration_seconds: float) -> None:
-    ANALYSIS_JOBS_TOTAL.labels(job_type=job_type, status=status).inc()
-    ANALYSIS_JOB_DURATION_SECONDS.labels(job_type=job_type).observe(duration_seconds)
-
-
-def record_file_uploaded(kind: str) -> None:
-    FILES_UPLOADED_TOTAL.labels(kind=kind).inc()
-
-
-def record_records_processed(count: int) -> None:
-    RECORDS_PROCESSED_TOTAL.inc(max(0, int(count)))
-
-
-def set_worker_active(active: bool) -> None:
-    WORKERS_ACTIVE.set(1 if active else 0)
-
-
-def record_queue_depth(queue_name: str, attributes: dict) -> None:
-    for state, key in (
-        ("visible", "ApproximateNumberOfMessages"),
-        ("in_flight", "ApproximateNumberOfMessagesNotVisible"),
-    ):
-        try:
-            value = int(attributes.get(key, 0))
-        except (TypeError, ValueError):
-            value = 0
-        SQS_QUEUE_DEPTH.labels(queue=queue_name, state=state).set(value)
+    ANALYSIS_JOBS_TOTAL.labels(status=status).inc()
+    ANALYSIS_JOB_DURATION_SECONDS.observe(duration_seconds)
 
 
 async def metrics_middleware(request: Request, call_next):
     start = time.perf_counter()
-    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    request_token = request_id_context.set(request_id)
-    response = None
     status_code = 500
-
     try:
         response = await call_next(request)
         status_code = response.status_code
-    except Exception:
-        raise
+        return response
     finally:
         duration = time.perf_counter() - start
-
-        path = request.url.path
-
+        route = _route_label(request)
         HTTP_REQUESTS_TOTAL.labels(
             method=request.method,
-            path=path,
+            route=route,
             status=str(status_code),
         ).inc()
-
         HTTP_REQUEST_DURATION_SECONDS.labels(
             method=request.method,
-            path=path,
+            route=route,
         ).observe(duration)
 
-        logger.info(
-            "http_request",
-            extra={
-                "event": "http_request",
-                "method": request.method,
-                "path": path,
-                "status": status_code,
-                "duration_ms": round(duration * 1000, 3),
-            },
-        )
-        request_id_context.reset(request_token)
 
-    if response is not None:
-        response.headers["X-Request-ID"] = request_id
-        return response
+def _collect_runtime_metrics() -> None:
+    try:
+        from app.db.session import get_engine
+        pool = get_engine().pool
+        checked_out = getattr(pool, "checkedout", None)
+        size = getattr(pool, "size", None)
+        if callable(checked_out):
+            DB_POOL_CHECKED_OUT.set(float(checked_out()))
+        if callable(size):
+            DB_POOL_SIZE.set(float(size()))
+    except Exception:
+        pass
 
-    raise RuntimeError("request middleware completed without a response")
+    try:
+        from app.queue.sqs import get_queue_metrics
+        values = get_queue_metrics()
+        SQS_QUEUE_DEPTH.set(values["visible"])
+        SQS_MESSAGES_INFLIGHT.set(values["inflight"])
+    except Exception:
+        pass
+
+
+def _collector_loop() -> None:
+    interval = max(5, int(os.getenv("METRICS_COLLECTION_SECONDS", "15")))
+    while True:
+        _collect_runtime_metrics()
+        time.sleep(interval)
+
+
+def start_background_metrics_collector() -> None:
+    global _collector_started
+    with _collector_lock:
+        if _collector_started:
+            return
+        threading.Thread(
+            target=_collector_loop,
+            name="ciis-metrics-collector",
+            daemon=True,
+        ).start()
+        _collector_started = True
+
+
+def start_worker_metrics_server() -> None:
+    port = int(os.getenv("WORKER_METRICS_PORT", "9101"))
+    start_http_server(port)
+    start_background_metrics_collector()
 
 
 def metrics_endpoint() -> Response:
+    _collect_runtime_metrics()
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST,
