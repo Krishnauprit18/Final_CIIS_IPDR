@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 
-from app.auth.repository import get_case_membership_role
+from app.auth.repository import get_case_membership_role, log_audit_event
 
 CASE_VIEW_ROLES = {"OWNER", "EDITOR", "VIEWER"}
 CASE_EDIT_ROLES = {"OWNER", "EDITOR"}
@@ -19,6 +19,13 @@ def require_case_access(user: dict, case_id: int) -> str:
 
     role = get_case_membership_role(case_id=case_id, user_id=int(user["id"]))
     if role not in CASE_VIEW_ROLES:
+        log_audit_event(
+            actor_user_id=int(user["id"]),
+            action="case_access_denied",
+            outcome="denied",
+            resource_type="case",
+            resource_id=str(case_id),
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Case access denied",
@@ -32,6 +39,14 @@ def require_case_role(user: dict, case_id: int, allowed_roles: set[str]) -> str:
 
     role = get_case_membership_role(case_id=case_id, user_id=int(user["id"]))
     if role not in allowed_roles:
+        log_audit_event(
+            actor_user_id=int(user["id"]),
+            action="case_permission_denied",
+            outcome="denied",
+            resource_type="case",
+            resource_id=str(case_id),
+            metadata={"required_roles": sorted(allowed_roles)},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient case permission",
