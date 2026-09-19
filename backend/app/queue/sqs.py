@@ -14,6 +14,7 @@ from app.core.config import (
     SQS_SECRET_KEY,
     WORKER_VISIBILITY_TIMEOUT,
 )
+from app.metrics import record_queue_depth
 
 
 @lru_cache(maxsize=1)
@@ -69,7 +70,12 @@ def delete_analysis_message(receipt_handle: str) -> None:
 
 
 def queue_healthcheck() -> None:
-    get_sqs_client().get_queue_attributes(
+    attributes = get_sqs_client().get_queue_attributes(
         QueueUrl=get_analysis_queue_url(),
-        AttributeNames=["QueueArn"],
-    )
+        AttributeNames=[
+            "QueueArn",
+            "ApproximateNumberOfMessages",
+            "ApproximateNumberOfMessagesNotVisible",
+        ],
+    ).get("Attributes", {})
+    record_queue_depth(SQS_ANALYSIS_QUEUE_NAME, attributes)

@@ -13,6 +13,7 @@ from app.jobs.service import (
     get_job,
     mark_job_failed,
 )
+from app.metrics import record_file_uploaded
 from app.queue.sqs import send_analysis_message
 from app.storage.service import delete_object, upload_fileobj
 
@@ -66,6 +67,7 @@ async def create_case_analysis(
         dataset_key,
         content_type=dataset_file.content_type,
     )
+    record_file_uploaded("dataset")
 
     case_file_key = None
 
@@ -80,6 +82,7 @@ async def create_case_analysis(
             case_file_key,
             content_type=case_file.content_type,
         )
+        record_file_uploaded("case_document")
 
     job = create_analysis_job(
         case_id=case_id,

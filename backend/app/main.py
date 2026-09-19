@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
+from app.core.logging import configure_logging
 from app.db.legacy_compat import install_legacy_postgres_compat
 from app.metrics import metrics_endpoint, metrics_middleware
 from app.queue.sqs import queue_healthcheck
@@ -34,6 +35,7 @@ from app.api.routers import (
 
 
 def create_app() -> FastAPI:
+    configure_logging()
     application = FastAPI(title="CIIS IPDR Analysis API")
 
     application.add_middleware(
