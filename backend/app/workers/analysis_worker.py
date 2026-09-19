@@ -183,7 +183,7 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
                     extra={"event": "job_succeeded", "result_uri": result_uri},
                 )
 
-            except Exception:
+            except Exception as exc:
                 ANALYSIS_JOB_FAILURES_TOTAL.inc()
                 ANALYSIS_JOBS_TOTAL.labels(status="attempt_failed").inc()
                 logger.exception(
@@ -195,9 +195,9 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
                 )
 
                 if receive_count >= MAX_RECEIVE_COUNT:
-                    fail_job(job_id, worker_id, "analysis attempt failed")
+                    fail_job(job_id, worker_id, str(exc))
                 else:
-                    retry_job(job_id, worker_id, "analysis attempt failed")
+                    retry_job(job_id, worker_id, str(exc))
                 raise
     finally:
         ANALYSIS_JOB_DURATION_SECONDS.observe(time.perf_counter() - started)
