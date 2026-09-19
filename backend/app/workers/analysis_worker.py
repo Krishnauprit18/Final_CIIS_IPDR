@@ -13,6 +13,7 @@ import pandas as pd
 
 from app.core.config import WORKER_POLL_SECONDS, WORKER_VISIBILITY_TIMEOUT
 from app.core.logging import configure_logging
+from app.workers.health import touch_worker_heartbeat
 from app.metrics import (
     record_job_finished,
     record_records_processed,
@@ -179,11 +180,13 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
 
 def run_worker() -> None:
     configure_logging()
+    touch_worker_heartbeat()
     set_worker_active(True)
     logger.info("worker_started", extra={"event": "worker_started", "worker_id": WORKER_ID})
 
     while True:
         try:
+            touch_worker_heartbeat()
             messages = receive_analysis_messages(
                 wait_time_seconds=WORKER_POLL_SECONDS,
                 max_messages=1,

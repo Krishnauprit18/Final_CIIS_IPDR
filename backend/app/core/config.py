@@ -106,3 +106,11 @@ WORKER_POLL_SECONDS = int(
 WORKER_VISIBILITY_TIMEOUT = int(
     os.getenv("WORKER_VISIBILITY_TIMEOUT", "900")
 )
+
+WORKER_HEARTBEAT_FILE = os.getenv(
+    "WORKER_HEARTBEAT_FILE",
+    "/tmp/ciis-worker-heartbeat",
+)
+WORKER_HEARTBEAT_MAX_AGE_SECONDS = int(
+    os.getenv("WORKER_HEARTBEAT_MAX_AGE_SECONDS", "90")
+)
