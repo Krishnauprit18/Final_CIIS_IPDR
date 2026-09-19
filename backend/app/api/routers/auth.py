@@ -53,7 +53,7 @@ def login(payload: LoginRequest, response: Response):
 @router.post("/register")
 def register(payload: RegisterRequest, response: Response):
     try:
-        result = service.register(payload.model_dump())
+        result = service.register(payload.dict())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -119,7 +119,7 @@ def get_profile(user: dict = Depends(current_user)):
 
 @router.put("/profile")
 def update_profile(payload: ProfileUpdateRequest, user: dict = Depends(current_user)):
-    repository.update_profile(int(user["id"]), payload.model_dump(exclude_none=True))
+    repository.update_profile(int(user["id"]), payload.dict(exclude_none=True))
     repository.log_audit_event(
         actor_user_id=int(user["id"]),
         action="profile_update",
