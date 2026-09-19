@@ -31,6 +31,20 @@ class JsonFormatter(logging.Formatter):
         if event:
             payload["event"] = event
 
+        reserved = {
+            "name", "msg", "args", "levelname", "levelno", "pathname",
+            "filename", "module", "exc_info", "exc_text", "stack_info",
+            "lineno", "funcName", "created", "msecs", "relativeCreated",
+            "thread", "threadName", "processName", "process", "message",
+            "event",
+        }
+        for key, value in record.__dict__.items():
+            if key not in reserved and not key.startswith("_"):
+                payload[key] = value
+
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+
         return json.dumps(payload, separators=(",", ":"), default=str)
 
 
