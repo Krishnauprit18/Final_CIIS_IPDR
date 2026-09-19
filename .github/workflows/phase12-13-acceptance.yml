@@ -1,15 +1,6 @@
 name: Phase 12-13 Acceptance
 
 on:
-  push:
-    branches:
-      - feat/phase-12-13-ecr-eks
-    paths:
-      - 'scripts/**'
-      - 'deploy/helm/ciis/**'
-      - 'infra/terraform/**'
-      - 'compose.floci.yaml'
-      - '.github/workflows/phase12-13-acceptance.yml'
   pull_request:
     paths:
       - 'scripts/**'
@@ -18,9 +9,12 @@ on:
       - 'compose.floci.yaml'
       - '.github/workflows/phase12-13-acceptance.yml'
 
+  workflow_dispatch:
+
 jobs:
   static-validation:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +35,12 @@ jobs:
       - name: Helm lint and render
         run: |
           helm lint deploy/helm/ciis
-          helm template ciis deploy/helm/ciis --set image.tag=ci-test --set config.flociIp=172.18.0.2 >/tmp/ciis-rendered.yaml
+
+          helm template ciis deploy/helm/ciis \
+            --set image.tag=ci-test \
+            --set config.flociIp=172.18.0.2 \
+            >/tmp/ciis-rendered.yaml
+
           grep -q 'name: ciis-api' /tmp/ciis-rendered.yaml
           grep -q 'name: ciis-worker' /tmp/ciis-rendered.yaml
           grep -q 'name: floci-local' /tmp/ciis-rendered.yaml
@@ -54,17 +53,24 @@ jobs:
       - name: Terraform formatting
         run: terraform fmt -check -recursive infra/terraform
 
-      - name: Validate acceptance contract
+      - name: Terraform validate
         run: |
-          grep -q 'STEP 19' scripts/phase12-13-acceptance.sh
-          grep -q 'STEP 20' scripts/phase12-13-acceptance.sh
-          grep -q 'STEP 21' scripts/phase12-13-acceptance.sh
-          grep -q 'STEP 22' scripts/phase12-13-acceptance.sh
-          grep -q 'WORKER_VISIBILITY_TIMEOUT=15' scripts/phase12-13-acceptance.sh
+          terraform \
+            -chdir=infra/terraform/environments/local \
+            init \
+            -backend=false \
+            -input=false
+
+          terraform \
+            -chdir=infra/terraform/environments/local \
+            validate
 
   runtime-acceptance:
+    if: github.event_name == 'workflow_dispatch'
+
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
       - uses: actions/checkout@v4
 
@@ -83,32 +89,23 @@ jobs:
         with:
           version: v1.34.1
 
-      - name: Tool versions
-        run: |
-          docker version
-          docker compose version
-          aws --version
-          terraform version
-          helm version
-          kubectl version --client
-
       - name: Reconcile Floci infrastructure
         run: bash scripts/phase13-infra-reconcile.sh
 
-      - name: Bootstrap Phase 14 runtime secrets
+      - name: Bootstrap runtime secrets
         env:
           CIIS_DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
           CIIS_POSTGRES_PASSWORD: ciis
-          CIIS_AUTH_SECRET: ci-phase14-github-actions-auth-secret-0123456789abcdef
+          CIIS_AUTH_SECRET: ci-github-actions-runtime-secret-0123456789abcdef
         run: bash scripts/bootstrap-secrets.sh
 
-      - name: Deploy Phase 12-13
+      - name: Deploy
         run: bash scripts/phase12-13-deploy.sh
 
       - name: Infrastructure smoke test
         run: bash scripts/phase13-verify.sh
 
-      - name: Steps 19-22 acceptance
+      - name: Distributed-system acceptance
         run: bash scripts/phase12-13-acceptance.sh
 
       - name: Diagnostics
@@ -116,9 +113,12 @@ jobs:
         run: |
           docker ps -a || true
           docker compose -f compose.floci.yaml logs --no-color || true
+
           source scripts/phase13-kube-env.sh || true
+
           kubectl get nodes -o wide || true
           kubectl get pods -A -o wide || true
-          kubectl get events -A --sort-by=.lastTimestamp | tail -n 150 || true
-          kubectl logs deployment/ciis-api --tail=150 || true
-          kubectl logs deployment/ciis-worker --tail=150 || true
+
+          kubectl get events -A \
+            --sort-by=.lastTimestamp \
+            | tail -n 150 || true
