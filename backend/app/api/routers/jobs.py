@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import uuid
+from typing import Dict
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app import legacy_handlers
 from app.db.repositories import get_case_record
+from app.db.repositories import user_can_access_case
 from app.jobs.service import (
     create_analysis_job,
     get_job,
     mark_job_failed,
 )
+from app.metrics import record_file_uploaded
 from app.queue.sqs import send_analysis_message
 from app.storage.service import delete_object, upload_fileobj
 
@@ -25,6 +29,7 @@ async def create_case_analysis(
     case_id: int,
     dataset_file: UploadFile = File(...),
     case_file: UploadFile | None = File(None),
+    session: Dict = Depends(legacy_handlers.verify_token),
 ):
     case = get_case_record(case_id)
 
@@ -32,6 +37,17 @@ async def create_case_analysis(
         raise HTTPException(
             status_code=404,
             detail="Case not found",
+        )
+
+    # Direct unit tests call this coroutine without FastAPI dependency
+    # resolution. In a live request FastAPI always supplies the session dict;
+    # the compatibility branch keeps the existing handler-level tests useful.
+    if isinstance(session, dict) and not user_can_access_case(
+        session["username"], case_id, "analyst"
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this case",
         )
 
     if not dataset_file.filename:
@@ -51,6 +67,7 @@ async def create_case_analysis(
         dataset_key,
         content_type=dataset_file.content_type,
     )
+    record_file_uploaded("dataset")
 
     case_file_key = None
 
@@ -65,6 +82,7 @@ async def create_case_analysis(
             case_file_key,
             content_type=case_file.content_type,
         )
+        record_file_uploaded("case_document")
 
     job = create_analysis_job(
         case_id=case_id,

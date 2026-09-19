@@ -4,12 +4,15 @@ metadata:
   name: ciis-config
 data:
   FRONTEND_ORIGIN: {{ .Values.config.frontendOrigin | quote }}
+
   STORAGE_ENDPOINT_URL: {{ .Values.config.storageEndpointUrl | quote }}
   STORAGE_BUCKET: {{ .Values.config.storageBucket | quote }}
   STORAGE_REGION: {{ .Values.config.storageRegion | quote }}
   STORAGE_USE_SSL: "false"
+
   SQS_ENDPOINT_URL: {{ .Values.config.sqsEndpointUrl | quote }}
   SQS_REGION: {{ .Values.config.sqsRegion | quote }}
   SQS_ANALYSIS_QUEUE_NAME: {{ .Values.config.sqsQueueName | quote }}
   SQS_ANALYSIS_DLQ_NAME: {{ .Values.config.sqsDlqName | quote }}
+
   WORKER_POLL_SECONDS: {{ .Values.config.workerPollSeconds | quote }}

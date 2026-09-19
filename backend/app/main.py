@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import legacy_handlers
 from app.core.config import FRONTEND_ORIGIN
+from app.core.logging import configure_logging
 from app.db.legacy_compat import install_legacy_postgres_compat
 from app.metrics import metrics_endpoint, metrics_middleware
 from app.queue.sqs import queue_healthcheck
@@ -34,6 +35,7 @@ from app.api.routers import (
 
 
 def create_app() -> FastAPI:
+    configure_logging()
     application = FastAPI(title="CIIS IPDR Analysis API")
 
     application.add_middleware(
@@ -68,9 +70,32 @@ def create_app() -> FastAPI:
 
     @application.on_event("startup")
     def _startup() -> None:
-        legacy_handlers.startup_event()
-        verify_storage()
-        queue_healthcheck()
+        # Dependency outages should make readiness fail, not prevent the
+        # process from exposing liveness and diagnostic endpoints.
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        def log_startup_failure() -> None:
+            logger.exception(
+                "startup_dependency_unavailable",
+                extra={"event": "startup_dependency_unavailable"},
+            )
+
+        try:
+            legacy_handlers.startup_event()
+        except Exception:
+            log_startup_failure()
+
+        try:
+            verify_storage()
+        except Exception:
+            log_startup_failure()
+
+        try:
+            queue_healthcheck()
+        except Exception:
+            log_startup_failure()
 
     return application
 

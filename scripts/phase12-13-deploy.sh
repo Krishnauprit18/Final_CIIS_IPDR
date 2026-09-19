@@ -109,7 +109,10 @@ if [ -z "$FLOCI_IP" ]; then
 fi
 echo "Floci Kubernetes bridge target: $FLOCI_IP:4566"
 
-echo "[5/6] Linting and installing Helm chart"
+echo "[5/6] Synchronizing runtime secrets and installing Helm chart"
+if [ -x scripts/phase14-sync-k8s-secrets.sh ]; then
+  bash scripts/phase14-sync-k8s-secrets.sh
+fi
 helm lint deploy/helm/ciis
 helm upgrade --install ciis deploy/helm/ciis \
   --set "image.tag=$GIT_SHA" \

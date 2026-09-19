@@ -12,6 +12,7 @@ spec:
       labels:
         app: ciis-api
     spec:
+      serviceAccountName: ciis-app
       initContainers:
         - name: migrate
           image: "{{ .Values.image.registry }}/{{ .Values.api.repository }}:{{ .Values.image.tag }}"
@@ -21,7 +22,8 @@ spec:
             - configMapRef:
                 name: ciis-config
             - secretRef:
-                name: ciis-secret
+                name: ciis-runtime-secrets
+                optional: false
       containers:
         - name: api
           image: "{{ .Values.image.registry }}/{{ .Values.api.repository }}:{{ .Values.image.tag }}"
@@ -33,19 +35,20 @@ spec:
             - configMapRef:
                 name: ciis-config
             - secretRef:
-                name: ciis-secret
+                name: ciis-runtime-secrets
+                optional: false
           ports:
             - containerPort: 8000
           readinessProbe:
             httpGet:
-              path: /
+              path: /health/ready
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
-              path: /
+              path: /health/live
               port: 8000
             initialDelaySeconds: 20
             periodSeconds: 10

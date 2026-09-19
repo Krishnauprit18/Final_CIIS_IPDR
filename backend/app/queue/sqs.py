@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Any
 
 import boto3
+from botocore.client import Config
 
 from app.core.config import (
     SQS_ACCESS_KEY,
@@ -14,6 +15,7 @@ from app.core.config import (
     SQS_SECRET_KEY,
     WORKER_VISIBILITY_TIMEOUT,
 )
+from app.metrics import record_queue_depth
 
 
 @lru_cache(maxsize=1)
@@ -24,6 +26,11 @@ def get_sqs_client():
         region_name=SQS_REGION,
         aws_access_key_id=SQS_ACCESS_KEY,
         aws_secret_access_key=SQS_SECRET_KEY,
+        config=Config(
+            connect_timeout=3,
+            read_timeout=3,
+            retries={"max_attempts": 1, "mode": "standard"},
+        ),
     )
 
 
@@ -69,7 +76,12 @@ def delete_analysis_message(receipt_handle: str) -> None:
 
 
 def queue_healthcheck() -> None:
-    get_sqs_client().get_queue_attributes(
+    attributes = get_sqs_client().get_queue_attributes(
         QueueUrl=get_analysis_queue_url(),
-        AttributeNames=["QueueArn"],
-    )
+        AttributeNames=[
+            "QueueArn",
+            "ApproximateNumberOfMessages",
+            "ApproximateNumberOfMessagesNotVisible",
+        ],
+    ).get("Attributes", {})
+    record_queue_depth(SQS_ANALYSIS_QUEUE_NAME, attributes)

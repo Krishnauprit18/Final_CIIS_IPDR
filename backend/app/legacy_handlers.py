@@ -16,6 +16,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel
 
+from app.auth.security import (
+    hash_password as hash_password_argon2,
+    hash_session_token,
+    new_session_token,
+    verify_argon2_password,
+)
+from app.db.repositories import grant_case_membership, user_can_access_case
+
 def _load_env_file(path: str) -> None:
     """Minimal .env loader: KEY=VALUE lines, ignores comments/blank lines."""
     try:
@@ -239,8 +247,8 @@ def insert_user(user: Dict[str, Any]) -> None:
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO users (username, email, password_hash, password_salt, name, post, district, thana, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (username, email, password_hash, password_salt, name, post, district, thana, role, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             user["username"],
@@ -251,6 +259,7 @@ def insert_user(user: Dict[str, Any]) -> None:
             user.get("profile", {}).get("post"),
             user.get("profile", {}).get("district"),
             user.get("profile", {}).get("thana"),
+            user.get("role", "analyst"),
             user.get("created_at", datetime.now().isoformat()),
         ),
     )
@@ -320,26 +329,36 @@ class PasswordChangeRequest(BaseModel):
 
 # Authentication functions
 def authenticate_user(username_or_email: str, password: str) -> bool:
-    """Authenticate by username or official email using SQLite."""
+    """Authenticate and transparently upgrade legacy password hashes."""
     user = get_user_by_username(username_or_email)
     if not user:
         user = get_user_by_email(username_or_email)
     if not user:
         return False
-    # Prefer PBKDF2 with salt
+
+    password_hash = user.get("password_hash", "")
+    if password_hash.startswith("$argon2"):
+        if not verify_argon2_password(password, password_hash):
+            return False
+        return True
+
+    # Existing PBKDF2 and SHA-256 users remain readable during migration.
     salt = user.get("password_salt")
+    legacy_ok = False
     if salt:
-        if verify_password_pbkdf2(password, salt, user.get("password_hash", "")):
-            return True
-        return False
-    # Fallback to legacy SHA-256, and upgrade on success
-    legacy_ok = user.get("password_hash") == hashlib.sha256(password.encode()).hexdigest()
+        legacy_ok = verify_password_pbkdf2(password, salt, password_hash)
+    else:
+        legacy_ok = password_hash == hashlib.sha256(password.encode()).hexdigest()
+
     if legacy_ok:
         try:
-            salt_hex, hash_hex = hash_password_pbkdf2(password)
+            upgraded_hash = hash_password_argon2(password)
             conn = get_db_conn()
             cur = conn.cursor()
-            cur.execute("UPDATE users SET password_hash = ?, password_salt = ? WHERE username = ?", (hash_hex, salt_hex, user["username"]))
+            cur.execute(
+                "UPDATE users SET password_hash = ?, password_salt = NULL WHERE username = ?",
+                (upgraded_hash, user["username"]),
+            )
             conn.commit()
             conn.close()
         except Exception:
@@ -347,21 +366,22 @@ def authenticate_user(username_or_email: str, password: str) -> bool:
     return legacy_ok
 
 def create_access_token(username: str) -> str:
-    token = secrets.token_urlsafe(32)
+    token = new_session_token()
     expires_at = datetime.now() + timedelta(hours=24)
-    create_session(token, username, expires_at)
+    create_session(hash_session_token(token), username, expires_at)
     return token
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
     token = credentials.credentials
-    session = get_session(token)
+    token_digest = hash_session_token(token)
+    session = get_session(token_digest)
     if session:
         # Parse dates
         expires_at = datetime.fromisoformat(session["expires_at"]) if isinstance(session["expires_at"], str) else session["expires_at"]
         if datetime.now() < expires_at:
             return session
         # session expired -> delete
-        delete_session(token)
+        delete_session(token_digest)
     raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 @app.on_event("startup")
@@ -433,18 +453,19 @@ async def register(request: RegisterRequest):
     if get_user_by_username(username) or get_user_by_email(email_lower):
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
-    salt_hex, hash_hex = hash_password_pbkdf2(request.password)
+    hash_hex = hash_password_argon2(request.password)
     insert_user({
         "username": username,
         "password_hash": hash_hex,
-        "password_salt": salt_hex,
+        "password_salt": None,
         "email": email_lower,
         "name": request.name,
         "profile": {
             "post": request.post,
-            "district": request.district,
-            "thana": request.thana,
+        "district": request.district,
+        "thana": request.thana,
         },
+        "role": "analyst",
         "created_at": datetime.now().isoformat(),
     })
 
@@ -469,6 +490,7 @@ async def verify_session(session: Dict = Depends(verify_token)):
     return {
         "success": True,
         "username": session["username"],
+        "role": session.get("role", "analyst"),
         "valid": True
     }
 
@@ -484,6 +506,7 @@ async def get_profile(session: Dict = Depends(verify_token)):
         "post": user.get("post"),
         "district": user.get("district"),
         "thana": user.get("thana"),
+        "role": user.get("role", "analyst"),
         "created_at": user.get("created_at"),
     }
 
@@ -506,20 +529,26 @@ async def change_password(payload: PasswordChangeRequest, session: Dict = Depend
     user = get_user_by_username(session["username"]) or {}
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Verify current password (PBKDF2 if salt present, else legacy SHA-256)
+    # Verify Argon2id and retain a compatibility path for old hashes.
     salt = user.get("password_salt")
     ok = False
-    if salt:
+    password_hash = user.get("password_hash", "")
+    if password_hash.startswith("$argon2"):
+        ok = verify_argon2_password(payload.current_password, password_hash)
+    elif salt:
         ok = verify_password_pbkdf2(payload.current_password, salt, user.get("password_hash", ""))
     else:
         ok = (user.get("password_hash") == hashlib.sha256(payload.current_password.encode()).hexdigest())
     if not ok:
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    # Set new PBKDF2 hash and salt
-    salt_hex, hash_hex = hash_password_pbkdf2(payload.new_password)
+    # New password changes always use Argon2id and clear the legacy salt.
+    hash_hex = hash_password_argon2(payload.new_password)
     conn = get_db_conn()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET password_hash = ?, password_salt = ? WHERE username = ?", (hash_hex, salt_hex, session["username"]))
+    cur.execute(
+        "UPDATE users SET password_hash = ?, password_salt = NULL WHERE username = ?",
+        (hash_hex, session["username"]),
+    )
     conn.commit()
     conn.close()
     # Invalidate all sessions for this user
@@ -1180,12 +1209,20 @@ def map_suspicious_phones_network_html(days: int = 7, limit: int = 200):
 # =============================
 
 @app.post("/cases/{case_id}/ai-analyze")
-async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), dataset_file: UploadFile = File(...), chunksize: Optional[int] = None):
+async def ai_analyze_case(
+    case_id: int,
+    case_file: UploadFile = File(...),
+    dataset_file: UploadFile = File(...),
+    chunksize: Optional[int] = None,
+    session: Dict = Depends(verify_token),
+):
     """
     Accept a case document and a raw IPDR dataset, run analysis (A->B mapping, suspicious detection),
     and store results under the given case_id for visualization. This leverages local analytics 
     modules (normalizer, relationship extractor, suspicious detector).
     """
+    _require_case_access(case_id, session, minimum_role="analyst")
+
     if not case_file.filename or not dataset_file.filename:
         raise HTTPException(status_code=400, detail="Both case_file and dataset_file are required")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -1226,13 +1263,20 @@ async def ai_analyze_case(case_id: int, case_file: UploadFile = File(...), datas
         raise HTTPException(status_code=500, detail=f"Error analyzing case dataset: {str(e)}")
 
 @app.get("/map/case-network/html")
-def map_case_network_html(case_id: int, days: int = 7, limit: int = 200):
+def map_case_network_html(
+    case_id: int,
+    days: int = 7,
+    limit: int = 200,
+    session: Dict = Depends(verify_token),
+):
     """
     Render a case-specific network map:
     - Flag (🚩) markers for suspicious phones' last locations in the past N days
     - Dashed lines between linked phones (direct via B-Phone, inferred via shared destination IPs)
     - Pin (📍) markers for nearest police stations per city with hypothetical incharge cards
     """
+    _require_case_access(case_id, session, minimum_role="viewer")
+
     if case_id not in CASE_ANALYSES:
         return HTMLResponse("<html><body>No case analysis found. Upload via Cases tab.</body></html>", media_type='text/html')
     df = CASE_ANALYSES[case_id]["df"]
@@ -3313,6 +3357,16 @@ class SaveSearchRequest(BaseModel):
     criteria_json: Dict[str, Any]
     notes: Optional[str] = None
 
+
+def _require_case_access(
+    case_id: int,
+    session: Dict,
+    minimum_role: str = "viewer",
+) -> None:
+    username = session.get("username")
+    if not username or not user_can_access_case(username, case_id, minimum_role):
+        raise HTTPException(status_code=403, detail="You do not have access to this case")
+
 @app.post("/cases")
 def create_case(payload: CreateCaseRequest, session: Dict = Depends(verify_token)):
     if not payload.name or not payload.name.strip():
@@ -3326,6 +3380,7 @@ def create_case(payload: CreateCaseRequest, session: Dict = Depends(verify_token
     case_id = cur.lastrowid
     conn.commit()
     conn.close()
+    grant_case_membership(session["username"], case_id, role="owner")
     log_action(session.get("username"), "create_case", f"case_id={case_id}")
     return {"id": case_id, "name": payload.name.strip()}
 
@@ -3333,13 +3388,24 @@ def create_case(payload: CreateCaseRequest, session: Dict = Depends(verify_token
 def list_cases(session: Dict = Depends(verify_token)):
     conn = get_db_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, created_by, created_at FROM cases ORDER BY id DESC")
+    cur.execute(
+        """
+        SELECT DISTINCT c.id, c.name, c.created_by, c.created_at
+        FROM cases c
+        LEFT JOIN case_memberships cm ON cm.case_id = c.id
+        LEFT JOIN users u ON u.id = cm.user_id
+        WHERE c.created_by = ? OR u.username = ?
+        ORDER BY c.id DESC
+        """,
+        (session["username"], session["username"]),
+    )
     rows = [dict(zip([c[0] for c in cur.description], r)) for r in cur.fetchall()]
     conn.close()
     return {"cases": rows}
 
 @app.post("/cases/{case_id}/save-search")
 def save_search_to_case(case_id: int, payload: SaveSearchRequest, session: Dict = Depends(verify_token)):
+    _require_case_access(case_id, session, minimum_role="analyst")
     conn = get_db_conn()
     cur = conn.cursor()
     # Ensure case exists
@@ -3359,6 +3425,7 @@ def save_search_to_case(case_id: int, payload: SaveSearchRequest, session: Dict 
 
 @app.get("/cases/{case_id}/searches")
 def list_saved_searches(case_id: int, session: Dict = Depends(verify_token)):
+    _require_case_access(case_id, session, minimum_role="viewer")
     conn = get_db_conn()
     cur = conn.cursor()
     cur.execute("SELECT id, criteria_json, notes, created_at FROM saved_searches WHERE case_id = ? ORDER BY id DESC", (case_id,))
@@ -3368,6 +3435,7 @@ def list_saved_searches(case_id: int, session: Dict = Depends(verify_token)):
 
 @app.post("/cases/{case_id}/export-pack")
 def export_case_pack(case_id: int, session: Dict = Depends(verify_token)):
+    _require_case_access(case_id, session, minimum_role="viewer")
     # Export a simple pack with saved searches + summaries
     conn = get_db_conn()
     cur = conn.cursor()

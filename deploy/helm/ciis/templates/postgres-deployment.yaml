@@ -23,8 +23,9 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ciis-secret
+                  name: ciis-runtime-secrets
                   key: POSTGRES_PASSWORD
+                  optional: false
           ports:
             - containerPort: 5432
           readinessProbe:

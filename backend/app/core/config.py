@@ -36,17 +36,34 @@ def _env_bool(name: str, default: bool = False) -> bool:
 load_env_file()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://ciis:ciis@localhost:5432/ciis",
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "3"))
+
+# Phase 14 secret-management configuration. Secret values are injected by the
+# runtime (for example through a Kubernetes Secret); these settings only
+# describe where the local Floci-compatible Secrets Manager is and which
+# logical secret records the deployment uses.
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1").strip()
+SECRETS_MANAGER_ENDPOINT_URL = (
+    os.getenv("SECRETS_MANAGER_ENDPOINT_URL", os.getenv("AWS_ENDPOINT_URL", ""))
+    .strip()
+    or None
 )
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "").strip() or None
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip() or None
+CIIS_SECRETS_MODE = os.getenv("CIIS_SECRETS_MODE", "env").strip().lower()
+DATABASE_SECRET_ID = os.getenv("DATABASE_SECRET_ID", "ciis/database").strip()
+APPLICATION_SECRET_ID = os.getenv(
+    "APPLICATION_SECRET_ID",
+    "ciis/application",
+).strip()
 
 # Phase 3 object storage. The defaults target the local MinIO service; in
 # production, STORAGE_ENDPOINT_URL may be left empty so boto3 uses AWS S3.
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "ciis-storage")
 STORAGE_ENDPOINT_URL = os.getenv("STORAGE_ENDPOINT_URL", "http://localhost:9000").strip() or None
-STORAGE_ACCESS_KEY = os.getenv("STORAGE_ACCESS_KEY", "ciisadmin").strip() or None
-STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "ciisadmin123").strip() or None
+STORAGE_ACCESS_KEY = os.getenv("STORAGE_ACCESS_KEY", "").strip() or None
+STORAGE_SECRET_KEY = os.getenv("STORAGE_SECRET_KEY", "").strip() or None
 STORAGE_REGION = os.getenv("STORAGE_REGION", "us-east-1")
 STORAGE_USE_SSL = _env_bool("STORAGE_USE_SSL", default=False)
 
@@ -65,12 +82,12 @@ SQS_REGION = os.getenv(
 
 SQS_ACCESS_KEY = os.getenv(
     "SQS_ACCESS_KEY",
-    "test",
+    "",
 ).strip() or None
 
 SQS_SECRET_KEY = os.getenv(
     "SQS_SECRET_KEY",
-    "test",
+    "",
 ).strip() or None
 
 SQS_ANALYSIS_QUEUE_NAME = os.getenv(
@@ -89,4 +106,12 @@ WORKER_POLL_SECONDS = int(
 
 WORKER_VISIBILITY_TIMEOUT = int(
     os.getenv("WORKER_VISIBILITY_TIMEOUT", "900")
+)
+
+WORKER_HEARTBEAT_FILE = os.getenv(
+    "WORKER_HEARTBEAT_FILE",
+    "/tmp/ciis-worker-heartbeat",
+)
+WORKER_HEARTBEAT_MAX_AGE_SECONDS = int(
+    os.getenv("WORKER_HEARTBEAT_MAX_AGE_SECONDS", "90")
 )

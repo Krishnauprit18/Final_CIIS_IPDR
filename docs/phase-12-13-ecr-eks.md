@@ -84,4 +84,4 @@ Do not export test/test credentials into the interactive shell used by kubectl.
 
 ## Current boundary
 
-This is a production-shaped local AWS/Kubernetes lab, not real AWS production. PostgreSQL is still running inside Kubernetes for this phase. RDS, Secrets Manager, dedicated /health/live and /health/ready endpoints, Ingress, HPA, PDB, NetworkPolicy, stronger ServiceAccount/RBAC, Jenkins/CD and later reliability/security work remain future phases.
+This is a production-shaped local AWS/Kubernetes lab, not real AWS production. PostgreSQL is still running inside Kubernetes for this phase. RDS, Ingress, HPA, PDB, NetworkPolicy, stronger ServiceAccount/RBAC, Jenkins/CD and later reliability/security work remain future phases. Secrets Manager integration is covered by Phase 14, authentication/authorization by Phase 15, observability by Phase 16, and dedicated liveness/readiness semantics by Phase 17.

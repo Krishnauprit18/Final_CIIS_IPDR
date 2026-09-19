@@ -59,3 +59,22 @@ output "kube_admin_secret_access_key" {
   value     = aws_iam_access_key.kube_admin.secret
   sensitive = true
 }
+
+resource "aws_iam_role_policy" "ciis_app_secrets" {
+  name = "ciis-app-secrets-read"
+  role = aws_iam_role.ciis_app.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadCIISSecrets"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.ciis_secret_arns
+      }
+    ]
+  })
+}
