@@ -26,5 +26,6 @@ spec:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
+                optional: false
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}

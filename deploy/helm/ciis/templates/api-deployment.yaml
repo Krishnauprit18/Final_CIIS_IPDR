@@ -23,6 +23,7 @@ spec:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
+                optional: false
       containers:
         - name: api
           image: "{{ .Values.image.registry }}/{{ .Values.api.repository }}:{{ .Values.image.tag }}"
@@ -35,6 +36,7 @@ spec:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
+                optional: false
           ports:
             - containerPort: 8000
           readinessProbe:

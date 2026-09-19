@@ -38,6 +38,25 @@ FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
+# Phase 14 secret-management configuration. Secret values are injected by the
+# runtime (for example through a Kubernetes Secret); these settings only
+# describe where the local Floci-compatible Secrets Manager is and which
+# logical secret records the deployment uses.
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1").strip()
+SECRETS_MANAGER_ENDPOINT_URL = (
+    os.getenv("SECRETS_MANAGER_ENDPOINT_URL", os.getenv("AWS_ENDPOINT_URL", ""))
+    .strip()
+    or None
+)
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "").strip() or None
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip() or None
+CIIS_SECRETS_MODE = os.getenv("CIIS_SECRETS_MODE", "env").strip().lower()
+DATABASE_SECRET_ID = os.getenv("DATABASE_SECRET_ID", "ciis/database").strip()
+APPLICATION_SECRET_ID = os.getenv(
+    "APPLICATION_SECRET_ID",
+    "ciis/application",
+).strip()
+
 # Phase 3 object storage. The defaults target the local MinIO service; in
 # production, STORAGE_ENDPOINT_URL may be left empty so boto3 uses AWS S3.
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "ciis-storage")
@@ -62,12 +81,12 @@ SQS_REGION = os.getenv(
 
 SQS_ACCESS_KEY = os.getenv(
     "SQS_ACCESS_KEY",
-    "test",
+    "",
 ).strip() or None
 
 SQS_SECRET_KEY = os.getenv(
     "SQS_SECRET_KEY",
-    "test",
+    "",
 ).strip() or None
 
 SQS_ANALYSIS_QUEUE_NAME = os.getenv(
