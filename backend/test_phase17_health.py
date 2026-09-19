@@ -61,3 +61,21 @@ def test_phase17_probes_use_dedicated_endpoints_and_worker_exec_check():
     assert "path: /health/ready" in api
     assert "path: /health/live" in api
     assert '"app.container_healthcheck"' in worker
+
+
+def test_dependency_clients_have_bounded_health_timeouts():
+    storage = (PROJECT_ROOT / "backend" / "app" / "storage" / "s3.py").read_text(
+        encoding="utf-8"
+    )
+    queue = (PROJECT_ROOT / "backend" / "app" / "queue" / "sqs.py").read_text(
+        encoding="utf-8"
+    )
+    session = (PROJECT_ROOT / "backend" / "app" / "db" / "session.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "connect_timeout=3" in storage
+    assert "read_timeout=3" in storage
+    assert "connect_timeout=3" in queue
+    assert "read_timeout=3" in queue
+    assert "connect_timeout" in session

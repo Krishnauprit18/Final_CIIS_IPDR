@@ -17,6 +17,11 @@ It returns `200` with `status: ready` only when all checks pass. A dependency
 failure returns `503` with `status: not_ready` and safe error class names; raw
 connection strings and exception messages are not returned.
 
+Each dependency client uses bounded connect/read timeouts and a single SDK
+retry for readiness calls. An unavailable dependency therefore produces a
+deterministic 503 instead of holding a probe request open through the SDK's
+normal application-operation retry budget.
+
 ## Kubernetes and container behavior
 
 The API Deployment uses:

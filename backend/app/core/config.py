@@ -37,6 +37,7 @@ load_env_file()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+DB_CONNECT_TIMEOUT_SECONDS = int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "3"))
 
 # Phase 14 secret-management configuration. Secret values are injected by the
 # runtime (for example through a Kubernetes Secret); these settings only
