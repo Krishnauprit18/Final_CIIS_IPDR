@@ -36,19 +36,27 @@ spec:
             - secretRef:
                 name: ciis-runtime-secrets
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: 8000
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            periodSeconds: 2
+            failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: /
+              path: /health/ready
               port: 8000
-            initialDelaySeconds: 5
             periodSeconds: 5
-            failureThreshold: 12
+            timeoutSeconds: 3
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /health/live
               port: 8000
-            initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
           resources:
 {{ toYaml .Values.api.resources | indent 12 }}
