@@ -23,13 +23,37 @@ spec:
               value: worker
             - name: WORKER_METRICS_PORT
               value: "9101"
+            - name: WORKER_HEALTH_PORT
+              value: "9102"
           ports:
             - name: metrics
               containerPort: 9101
+            - name: health
+              containerPort: 9102
           envFrom:
             - configMapRef:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 9102
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9102
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9102
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}
