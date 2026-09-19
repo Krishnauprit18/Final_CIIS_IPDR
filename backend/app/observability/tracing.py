@@ -12,11 +12,12 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 
-def configure_tracing(app: FastAPI) -> None:
+_configured = False
+
+
+def _provider(service_name: str) -> TracerProvider:
     provider = TracerProvider(
-        resource=Resource.create(
-            {"service.name": os.getenv("CIIS_ROLE", "ciis-api")}
-        )
+        resource=Resource.create({"service.name": service_name})
     )
 
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
@@ -25,7 +26,14 @@ def configure_tracing(app: FastAPI) -> None:
             endpoint=f"{endpoint.rstrip('/')}/v1/traces"
         )
         provider.add_span_processor(BatchSpanProcessor(exporter))
+    return provider
 
+
+def configure_tracing(app: FastAPI) -> None:
+    global _configured
+    if _configured:
+        return
+    provider = _provider(os.getenv("CIIS_ROLE", "ciis-api"))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app)
 
@@ -33,3 +41,21 @@ def configure_tracing(app: FastAPI) -> None:
         SQLAlchemyInstrumentor().instrument()
     except Exception:
         pass
+    _configured = True
+
+
+def configure_worker_tracing() -> None:
+    global _configured
+    if _configured:
+        return
+    provider = _provider(os.getenv("CIIS_ROLE", "ciis-worker"))
+    trace.set_tracer_provider(provider)
+    try:
+        SQLAlchemyInstrumentor().instrument()
+    except Exception:
+        pass
+    _configured = True
+
+
+def get_tracer(name: str):
+    return trace.get_tracer(name)
