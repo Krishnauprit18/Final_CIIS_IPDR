@@ -41,6 +41,7 @@ services:
       SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
 
       FRONTEND_ORIGIN: http://localhost:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       CIIS_ROLE: api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
@@ -109,6 +110,15 @@ services:
     restart: unless-stopped
 
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:11.3.1
     environment:
@@ -116,6 +126,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
