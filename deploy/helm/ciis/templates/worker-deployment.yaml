@@ -23,8 +23,6 @@ spec:
               value: worker
             - name: WORKER_METRICS_PORT
               value: "9101"
-            - name: WORKER_METRICS_PORT
-              value: "9101"
           ports:
             - name: metrics
               containerPort: 9101
@@ -33,8 +31,5 @@ spec:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
-          ports:
-            - name: metrics
-              containerPort: 9101
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}
