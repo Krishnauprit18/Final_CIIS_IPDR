@@ -108,6 +108,13 @@ WORKER_VISIBILITY_TIMEOUT = int(
     os.getenv("WORKER_VISIBILITY_TIMEOUT", "900")
 )
 
+# Phase 15 authentication. AUTH_SECRET has no source-code default and is
+# supplied through the Phase 14 runtime secret.
+AUTH_SECRET = os.getenv("AUTH_SECRET", "").strip()
+ACCESS_TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "15"))
+REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
+AUTH_COOKIE_SECURE = _env_bool("AUTH_COOKIE_SECURE", default=False)
+
 WORKER_HEARTBEAT_FILE = os.getenv(
     "WORKER_HEARTBEAT_FILE",
     "/tmp/ciis-worker-heartbeat",

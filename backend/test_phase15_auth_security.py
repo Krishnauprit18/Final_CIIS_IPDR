@@ -32,16 +32,26 @@ def test_case_membership_is_in_the_persistence_model():
 
 
 def test_phase15_migration_is_the_expected_schema_head():
-    assert EXPECTED_ALEMBIC_REVISION == "0003_phase15_auth_security"
-    migration = (
+    assert EXPECTED_ALEMBIC_REVISION == "0004_phase15_auth_rbac"
+    security_migration = (
         PROJECT_ROOT
         / "backend"
         / "alembic"
         / "versions"
         / "0003_phase15_auth_security.py"
     ).read_text(encoding="utf-8")
-    assert 'op.execute("DELETE FROM sessions")' in migration
-    assert '"case_memberships"' in migration
+    rbac_migration = (
+        PROJECT_ROOT
+        / "backend"
+        / "alembic"
+        / "versions"
+        / "0004_phase15_auth_rbac.py"
+    ).read_text(encoding="utf-8")
+    assert 'op.execute("DELETE FROM sessions")' in security_migration
+    assert '"case_memberships"' in security_migration
+    assert 'revision = "0004_phase15_auth_rbac"' in rbac_migration
+    assert '"refresh_sessions"' in rbac_migration
+    assert '"audit_events"' in rbac_migration
 
 
 def test_case_and_job_routes_require_authenticated_access():
@@ -54,5 +64,5 @@ def test_case_and_job_routes_require_authenticated_access():
 
     assert "def _require_case_access" in cases
     assert "status_code=403" in cases
-    assert "Depends(legacy_handlers.verify_token)" in jobs
-    assert "user_can_access_case" in jobs
+    assert "Depends(current_user)" in jobs
+    assert "require_case_role" in jobs

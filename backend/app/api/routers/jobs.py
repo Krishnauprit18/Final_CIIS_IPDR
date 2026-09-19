@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Dict
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app import legacy_handlers
+from app.auth import repository as auth_repository
+from app.auth.dependencies import current_user
+from app.auth.permissions import CASE_EDIT_ROLES, require_case_access, require_case_role
 from app.db.repositories import get_case_record
-from app.db.repositories import user_can_access_case
 from app.jobs.service import (
     create_analysis_job,
     get_job,
@@ -29,7 +28,7 @@ async def create_case_analysis(
     case_id: int,
     dataset_file: UploadFile = File(...),
     case_file: UploadFile | None = File(None),
-    session: Dict = Depends(legacy_handlers.verify_token),
+    user: dict = Depends(current_user),
 ):
     case = get_case_record(case_id)
 
@@ -39,16 +38,7 @@ async def create_case_analysis(
             detail="Case not found",
         )
 
-    # Direct unit tests call this coroutine without FastAPI dependency
-    # resolution. In a live request FastAPI always supplies the session dict;
-    # the compatibility branch keeps the existing handler-level tests useful.
-    if isinstance(session, dict) and not user_can_access_case(
-        session["username"], case_id, "analyst"
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have access to this case",
-        )
+    require_case_role(user, case_id, CASE_EDIT_ROLES)
 
     if not dataset_file.filename:
         raise HTTPException(
@@ -120,6 +110,15 @@ async def create_case_analysis(
             detail="Unable to queue analysis job",
         ) from exc
 
+    auth_repository.log_audit_event(
+        actor_user_id=int(user["id"]),
+        action="analysis_submitted",
+        outcome="success",
+        resource_type="case",
+        resource_id=str(case_id),
+        metadata={"job_id": job["id"]},
+    )
+
     return {
         "job_id": job["id"],
         "status": "queued",
@@ -127,7 +126,7 @@ async def create_case_analysis(
 
 
 @router.get("/jobs/{job_id}")
-def get_job_status(job_id: int):
+def get_job_status(job_id: int, user: dict = Depends(current_user)):
     job = get_job(job_id)
 
     if job is None:
@@ -135,5 +134,9 @@ def get_job_status(job_id: int):
             status_code=404,
             detail="Job not found",
         )
+
+    case_id = job.get("case_id")
+    if case_id is not None:
+        require_case_access(user, int(case_id))
 
     return job

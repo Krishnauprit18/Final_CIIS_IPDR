@@ -18,13 +18,62 @@ function applyAuth(config: InternalAxiosRequestConfig) {
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use(applyAuth);
 
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = axios.post(
+      `${API_BASE_URL}/auth/refresh`,
+      {},
+      { withCredentials: true },
+    )
+      .then((response) => {
+        const token = response.data?.token || response.data?.access_token;
+        if (!token) return null;
+        localStorage.setItem('ipdr_token', token);
+        if (response.data?.username) {
+          localStorage.setItem('ipdr_username', response.data.username);
+        }
+        return token as string;
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const original = error?.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+
+    if (
+      error?.response?.status === 401 &&
+      original &&
+      !original._retry &&
+      !String(original.url || '').includes('/auth/refresh')
+    ) {
+      original._retry = true;
+      const token = await refreshAccessToken();
+
+      if (token) {
+        if (typeof (original.headers as any)?.set === 'function') {
+          (original.headers as any).set('Authorization', `Bearer ${token}`);
+        } else {
+          (original.headers as any).Authorization = `Bearer ${token}`;
+        }
+        return apiClient(original);
+      }
+    }
+
     if (error?.response?.status === 401) {
       localStorage.removeItem('ipdr_token');
       localStorage.removeItem('ipdr_username');
@@ -33,14 +82,12 @@ apiClient.interceptors.response.use(
   },
 );
 
-// Transitional adapter for the isolated legacy analytics module. The old
-// dashboard still builds absolute localhost URLs internally; this interceptor
-// rewrites them to REACT_APP_API_BASE_URL so production never depends on the
-// user's localhost. New feature modules use apiClient directly.
+// Transitional adapter for the isolated legacy analytics module.
 axios.interceptors.request.use((config) => {
   if (typeof config.url === 'string' && config.url.startsWith(LEGACY_LOCAL_BASE)) {
     config.url = `${API_BASE_URL}${config.url.slice(LEGACY_LOCAL_BASE.length)}`;
   }
+  config.withCredentials = true;
   return applyAuth(config as InternalAxiosRequestConfig);
 });
 
