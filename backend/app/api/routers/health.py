@@ -1,23 +1,30 @@
-"""Process liveness and dependency readiness endpoints."""
+from __future__ import annotations
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app import legacy_handlers as handlers
-from app.health.service import readiness_report
+from app.health.service import readiness_status
 
 router = APIRouter(tags=["health"])
 
-router.add_api_route('/', handlers.read_root, methods=['GET'], name='read_root')
+
+@router.get("/")
+def root():
+    return {"message": "IPDR Analysis Backend is running."}
 
 
-@router.get("/health/live", tags=["health"])
-def live() -> dict[str, str]:
-    return {"status": "ok", "service": "ciis-api"}
+@router.get("/health/live")
+def live():
+    return {"status": "ok"}
 
 
-@router.get("/health/ready", tags=["health"])
+@router.get("/health/ready")
 def ready():
-    report = readiness_report()
-    if report["status"] != "ready":
-        return JSONResponse(status_code=503, content=report)
-    return report
+    is_ready, dependencies = readiness_status()
+    payload = {
+        "status": "ready" if is_ready else "not_ready",
+        "dependencies": dependencies,
+    }
+    if is_ready:
+        return payload
+    return JSONResponse(status_code=503, content=payload)

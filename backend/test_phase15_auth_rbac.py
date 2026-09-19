@@ -34,7 +34,7 @@ def test_access_token_is_short_lived_and_signed(monkeypatch):
         user_id=42,
         username="investigator@example.test",
         roles=["INVESTIGATOR"],
-        session_id="session-test",
+        session_id="session-123",
     )
     decoded = tokens.decode_access_token(encoded)
 
@@ -42,6 +42,7 @@ def test_access_token_is_short_lived_and_signed(monkeypatch):
     assert decoded["sub"] == "42"
     assert decoded["username"] == "investigator@example.test"
     assert decoded["roles"] == ["INVESTIGATOR"]
+    assert decoded["sid"] == "session-123"
     assert decoded["type"] == "access"
 
 

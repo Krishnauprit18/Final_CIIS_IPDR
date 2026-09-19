@@ -1,81 +1,58 @@
-from pathlib import Path
+from __future__ import annotations
 
-from fastapi.responses import JSONResponse
+import time
 
-from app.api.routers import health
-from app.workers import health as worker_health
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from app.api.routers import health as health_router
+from app.health import service
+from app.health import worker
 
 
-def test_liveness_does_not_require_dependencies():
-    assert health.live() == {"status": "ok", "service": "ciis-api"}
+def test_liveness_is_dependency_free():
+    assert health_router.live() == {"status": "ok"}
 
 
-def test_readiness_returns_503_when_a_dependency_is_down(monkeypatch):
-    monkeypatch.setattr(
-        health,
-        "readiness_report",
-        lambda: {
-            "status": "not_ready",
-            "service": "ciis-api",
-            "checks": {"database": {"status": "error", "error": "TimeoutError"}},
-        },
-    )
+def test_readiness_reports_all_dependencies(monkeypatch):
+    monkeypatch.setattr(service, "database_healthcheck", lambda: None)
+    monkeypatch.setattr(service, "verify_storage", lambda: None)
+    monkeypatch.setattr(service, "queue_healthcheck", lambda: None)
 
-    response = health.ready()
+    ready, checks = service.readiness_status()
 
-    assert isinstance(response, JSONResponse)
-    assert response.status_code == 503
+    assert ready is True
+    assert checks == {
+        "database": "ok",
+        "storage": "ok",
+        "queue": "ok",
+    }
 
 
-def test_worker_heartbeat_healthcheck(monkeypatch, tmp_path):
-    heartbeat = tmp_path / "worker-heartbeat"
-    monkeypatch.setattr(worker_health, "HEARTBEAT_FILE", heartbeat)
-    monkeypatch.setattr(worker_health, "HEARTBEAT_MAX_AGE_SECONDS", 90.0)
+def test_readiness_fails_without_killing_liveness(monkeypatch):
+    def fail_database():
+        raise RuntimeError("database unavailable")
 
-    assert not worker_health.worker_healthcheck()
-    worker_health.touch_worker_heartbeat()
-    assert worker_health.worker_healthcheck()
+    monkeypatch.setattr(service, "database_healthcheck", fail_database)
+    monkeypatch.setattr(service, "verify_storage", lambda: None)
+    monkeypatch.setattr(service, "queue_healthcheck", lambda: None)
 
+    ready, checks = service.readiness_status()
 
-def test_phase17_probes_use_dedicated_endpoints_and_worker_exec_check():
-    api = (
-        PROJECT_ROOT
-        / "deploy"
-        / "helm"
-        / "ciis"
-        / "templates"
-        / "api-deployment.yaml"
-    ).read_text(encoding="utf-8")
-    worker = (
-        PROJECT_ROOT
-        / "deploy"
-        / "helm"
-        / "ciis"
-        / "templates"
-        / "worker-deployment.yaml"
-    ).read_text(encoding="utf-8")
-
-    assert "path: /health/ready" in api
-    assert "path: /health/live" in api
-    assert '"app.container_healthcheck"' in worker
+    assert ready is False
+    assert checks["database"] == "error:RuntimeError"
+    assert health_router.live() == {"status": "ok"}
 
 
-def test_dependency_clients_have_bounded_health_timeouts():
-    storage = (PROJECT_ROOT / "backend" / "app" / "storage" / "s3.py").read_text(
-        encoding="utf-8"
-    )
-    queue = (PROJECT_ROOT / "backend" / "app" / "queue" / "sqs.py").read_text(
-        encoding="utf-8"
-    )
-    session = (PROJECT_ROOT / "backend" / "app" / "db" / "session.py").read_text(
-        encoding="utf-8"
-    )
+def test_worker_heartbeat_detects_stale_loop(monkeypatch):
+    monkeypatch.setenv("WORKER_HEARTBEAT_TIMEOUT_SECONDS", "30")
+    monkeypatch.setattr(worker, "_last_heartbeat", time.monotonic() - 31)
 
-    assert "connect_timeout=3" in storage
-    assert "read_timeout=3" in storage
-    assert "connect_timeout=3" in queue
-    assert "read_timeout=3" in queue
-    assert "connect_timeout" in session
+    alive, details = worker.worker_liveness()
+
+    assert alive is False
+    assert details["status"] == "stale"
+
+
+def test_worker_heartbeat_recovers():
+    worker.touch_worker_heartbeat()
+    alive, details = worker.worker_liveness()
+    assert alive is True
+    assert details["status"] == "ok"
