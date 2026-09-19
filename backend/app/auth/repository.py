@@ -254,3 +254,22 @@ def log_audit_event(
                 created_at=datetime.utcnow(),
             )
         )
+
+
+def list_case_memberships(case_id: int) -> list[dict[str, Any]]:
+    with session_scope() as db:
+        rows = db.execute(
+            select(CaseMembership, User)
+            .join(User, User.id == CaseMembership.user_id)
+            .where(CaseMembership.case_id == case_id)
+            .order_by(User.username)
+        ).all()
+        return [
+            {
+                "user_id": membership.user_id,
+                "username": user.username,
+                "role": membership.role,
+                "created_at": membership.created_at,
+            }
+            for membership, user in rows
+        ]
