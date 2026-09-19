@@ -95,6 +95,13 @@ jobs:
       - name: Reconcile Floci infrastructure
         run: bash scripts/phase13-infra-reconcile.sh
 
+      - name: Bootstrap Phase 14 runtime secrets
+        env:
+          CIIS_DATABASE_URL: postgresql+psycopg://ciis:ciis@postgres:5432/ciis
+          CIIS_POSTGRES_PASSWORD: ciis
+          CIIS_AUTH_SECRET: ci-phase14-github-actions-auth-secret-0123456789abcdef
+        run: bash scripts/bootstrap-secrets.sh
+
       - name: Deploy Phase 12-13
         run: bash scripts/phase12-13-deploy.sh
 

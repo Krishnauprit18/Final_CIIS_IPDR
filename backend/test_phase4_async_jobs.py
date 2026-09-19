@@ -63,11 +63,18 @@ def test_api_enqueue_success_returns_accepted_payload(monkeypatch):
     )
 
     dataset = UploadFile(filename="sample.csv", file=BytesIO(b"a,b\n1,2\n"))
+    monkeypatch.setattr(
+        jobs_router.auth_repository,
+        "log_audit_event",
+        lambda **kwargs: None,
+    )
+
     response = asyncio.run(
         jobs_router.create_case_analysis(
             case_id=1,
             dataset_file=dataset,
             case_file=None,
+            user={"id": 1, "roles": ["ADMIN"]},
         )
     )
 
@@ -107,6 +114,7 @@ def test_api_enqueue_failure_marks_job_failed_and_cleans_input(monkeypatch):
                 case_id=1,
                 dataset_file=dataset,
                 case_file=None,
+                user={"id": 1, "roles": ["ADMIN"]},
             )
         )
 

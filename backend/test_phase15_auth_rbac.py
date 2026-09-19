@@ -34,6 +34,7 @@ def test_access_token_is_short_lived_and_signed(monkeypatch):
         user_id=42,
         username="investigator@example.test",
         roles=["INVESTIGATOR"],
+        session_id="session-test",
     )
     decoded = tokens.decode_access_token(encoded)
 

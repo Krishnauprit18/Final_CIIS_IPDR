@@ -87,6 +87,15 @@ def _route_label(request: Request) -> str:
     return str(template) if template else "unmatched"
 
 
+def record_job_submitted(job_type: str) -> None:
+    ANALYSIS_JOBS_TOTAL.labels(status="submitted").inc()
+
+
+def record_job_finished(job_type: str, status: str, duration_seconds: float) -> None:
+    ANALYSIS_JOBS_TOTAL.labels(status=status).inc()
+    ANALYSIS_JOB_DURATION_SECONDS.observe(duration_seconds)
+
+
 async def metrics_middleware(request: Request, call_next):
     start = time.perf_counter()
     status_code = 500

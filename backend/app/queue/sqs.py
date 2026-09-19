@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 from app.core.config import (
     SQS_ACCESS_KEY,
@@ -24,6 +25,11 @@ def get_sqs_client():
         region_name=SQS_REGION,
         aws_access_key_id=SQS_ACCESS_KEY,
         aws_secret_access_key=SQS_SECRET_KEY,
+        config=Config(
+            connect_timeout=3,
+            read_timeout=3,
+            retries={"max_attempts": 2, "mode": "standard"},
+        ),
     )
 
 

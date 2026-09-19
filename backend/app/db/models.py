@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -23,6 +23,7 @@ class User(Base):
     post: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     district: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     thana: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="analyst")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
@@ -57,6 +58,23 @@ class Case(Base):
     saved_searches: Mapped[list["SavedSearch"]] = relationship(
         back_populates="case", cascade="all, delete-orphan", passive_deletes=True
     )
+
+
+class CaseMembership(Base):
+    __tablename__ = "case_memberships"
+    __table_args__ = (
+        UniqueConstraint("user_id", "case_id", name="uq_case_memberships_user_case"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    case_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="viewer")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
 class SavedSearch(Base):
@@ -146,26 +164,6 @@ class UserRole(Base):
         ForeignKey("roles.id", ondelete="CASCADE"),
         primary_key=True,
     )
-
-
-class CaseMembership(Base):
-    __tablename__ = "case_memberships"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    case_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("cases.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    role: Mapped[str] = mapped_column(String(20), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
 
 class RefreshSession(Base):

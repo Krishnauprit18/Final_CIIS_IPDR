@@ -31,5 +31,17 @@ spec:
                 name: ciis-config
             - secretRef:
                 name: ciis-runtime-secrets
+                optional: false
+          readinessProbe:
+            exec:
+              command: ["python", "-m", "app.container_healthcheck"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "app.container_healthcheck"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
           resources:
 {{ toYaml .Values.worker.resources | indent 12 }}

@@ -1,15 +1,15 @@
 """Phase 15 authentication and RBAC schema.
 
-Revision ID: 0003_phase15_auth_rbac
-Revises: 0002_phase5_job_correctness
+Revision ID: 0004_phase15_auth_rbac
+Revises: 0003_phase15_auth_security
 """
 from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0003_phase15_auth_rbac"
-down_revision = "0002_phase5_job_correctness"
+revision = "0004_phase15_auth_rbac"
+down_revision = "0003_phase15_auth_security"
 branch_labels = None
 depends_on = None
 
@@ -25,18 +25,6 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("role_id", sa.Integer(), sa.ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
     )
-    op.create_table(
-        "case_memberships",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("case_id", sa.Integer(), sa.ForeignKey("cases.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("role", sa.String(length=20), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=False), nullable=False),
-        sa.UniqueConstraint("case_id", "user_id", name="uq_case_memberships_case_user"),
-    )
-    op.create_index("ix_case_memberships_case_id", "case_memberships", ["case_id"])
-    op.create_index("ix_case_memberships_user_id", "case_memberships", ["user_id"])
-
     op.create_table(
         "refresh_sessions",
         sa.Column("id", sa.String(length=64), primary_key=True),
@@ -73,17 +61,12 @@ def upgrade() -> None:
         INSERT INTO user_roles (user_id, role_id)
         SELECT u.id, r.id
         FROM users u
-        CROSS JOIN roles r
-        WHERE r.name = 'INVESTIGATOR'
-        """
-    )
-    op.execute(
-        """
-        INSERT INTO case_memberships (case_id, user_id, role, created_at)
-        SELECT c.id, u.id, 'OWNER', CURRENT_TIMESTAMP
-        FROM cases c
-        JOIN users u ON u.username = c.created_by
-        ON CONFLICT (case_id, user_id) DO NOTHING
+        JOIN roles r ON r.name = CASE UPPER(COALESCE(u.role, 'ANALYST'))
+            WHEN 'ADMIN' THEN 'ADMIN'
+            WHEN 'VIEWER' THEN 'VIEWER'
+            ELSE 'INVESTIGATOR'
+        END
+        ON CONFLICT (user_id, role_id) DO NOTHING
         """
     )
 
@@ -91,6 +74,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("audit_events")
     op.drop_table("refresh_sessions")
-    op.drop_table("case_memberships")
     op.drop_table("user_roles")
     op.drop_table("roles")

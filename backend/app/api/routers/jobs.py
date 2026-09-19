@@ -8,9 +8,7 @@ from app.auth import repository as auth_repository
 from app.auth.dependencies import current_user
 from app.auth.permissions import CASE_EDIT_ROLES, require_case_access, require_case_role
 from app.core.context import request_id_var
-from app.core.context import case_id_var, request_id_var
 from app.db.repositories import get_case_record
-from app.metrics import FILES_UPLOADED_TOTAL
 from app.metrics import FILES_UPLOADED_TOTAL
 from app.jobs.service import (
     create_analysis_job,
@@ -78,10 +76,6 @@ async def create_case_analysis(
         )
         FILES_UPLOADED_TOTAL.inc()
 
-    FILES_UPLOADED_TOTAL.inc()
-    if case_file_key:
-        FILES_UPLOADED_TOTAL.inc()
-
     job = create_analysis_job(
         case_id=case_id,
         dataset_key=dataset_key,
@@ -129,11 +123,9 @@ async def create_case_analysis(
         metadata={"job_id": job["id"]},
     )
 
-    case_id_var.reset(case_token)
     return {
         "job_id": job["id"],
         "status": "queued",
-        "request_id": request_id,
     }
 
 
