@@ -10,11 +10,11 @@ export AWS_REGION="us-east-1"
 export AWS_ACCESS_KEY_ID="test"
 export AWS_SECRET_ACCESS_KEY="test"
 
-echo "[1/7] Starting Floci"
+echo "[1/8] Starting Floci"
 cd "$ROOT"
 docker compose -f compose.floci.yaml up -d --force-recreate
 
-echo "[2/7] Waiting for Floci"
+echo "[2/8] Waiting for Floci"
 for _ in $(seq 1 30); do
   if aws s3api list-buckets >/dev/null 2>&1; then
     break
@@ -22,12 +22,12 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
-echo "[3/7] Ensuring remote-state bucket exists"
+echo "[3/8] Ensuring remote-state bucket exists"
 if ! aws s3api head-bucket --bucket ciis-terraform-state >/dev/null 2>&1; then
   aws s3api create-bucket --bucket ciis-terraform-state >/dev/null
 fi
 
-echo "[4/7] Initializing Terraform"
+echo "[4/8] Initializing Terraform"
 cd "$TF_DIR"
 terraform init -reconfigure
 
@@ -46,7 +46,7 @@ import_if_missing() {
   terraform import "$address" "$id"
 }
 
-echo "[5/7] Reconciling resources created by earlier partial applies"
+echo "[5/8] Reconciling resources created by earlier partial applies"
 
 if aws s3api head-bucket --bucket ciis-raw-files >/dev/null 2>&1 && ! state_has module.s3.aws_s3_bucket.raw; then
   import_if_missing module.s3.aws_s3_bucket.raw ciis-raw-files
@@ -62,6 +62,10 @@ fi
 
 if aws iam get-role --role-name ciis-eks-cluster-role >/dev/null 2>&1 && ! state_has module.iam.aws_iam_role.eks_cluster; then
   import_if_missing module.iam.aws_iam_role.eks_cluster ciis-eks-cluster-role
+fi
+
+if aws iam get-user --user-name ciis-kube-admin >/dev/null 2>&1 && ! state_has module.iam.aws_iam_user.kube_admin; then
+  import_if_missing module.iam.aws_iam_user.kube_admin ciis-kube-admin
 fi
 
 for pair in   "module.ecr.aws_ecr_repository.api:ciis-api"   "module.ecr.aws_ecr_repository.worker:ciis-worker"   "module.ecr.aws_ecr_repository.web:ciis-web"; do
@@ -90,12 +94,12 @@ if aws eks describe-cluster --name ciis-local >/dev/null 2>&1 && ! state_has mod
   import_if_missing module.eks.aws_eks_cluster.ciis ciis-local
 fi
 
-echo "[6/7] Applying Terraform"
+echo "[6/8] Applying Terraform"
 terraform fmt -recursive
 terraform validate
 terraform apply -auto-approve
 
-echo "[7/7] Waiting for EKS cluster to become ACTIVE"
+echo "[7/8] Waiting for EKS cluster to become ACTIVE"
 for _ in $(seq 1 60); do
   status="$(aws eks describe-cluster --name ciis-local --query 'cluster.status' --output text 2>/dev/null || true)"
   echo "EKS status: ${status:-not-ready}"
@@ -111,6 +115,16 @@ if [ "$status" != "ACTIVE" ]; then
   exit 1
 fi
 
+echo "[8/8] Configuring authenticated kubectl access"
+KUBE_AWS_ACCESS_KEY_ID="$(terraform output -raw kube_admin_access_key_id)"
+KUBE_AWS_SECRET_ACCESS_KEY="$(terraform output -raw kube_admin_secret_access_key)"
+
+export AWS_ACCESS_KEY_ID="$KUBE_AWS_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$KUBE_AWS_SECRET_ACCESS_KEY"
+
+# Floci EKS authentication requires a real local IAM access key. The public
+# test/test pair is intentionally rejected for cluster-admin access.
+aws sts get-caller-identity >/dev/null
 aws eks update-kubeconfig --name ciis-local >/dev/null
 
 echo
@@ -126,3 +140,7 @@ if command -v kubectl >/dev/null 2>&1; then
 else
   echo "kubectl is not installed; install it before running the deploy script."
 fi
+
+echo
+echo "For manual kubectl commands in a new shell, run:"
+echo "  source scripts/phase13-kube-env.sh"
