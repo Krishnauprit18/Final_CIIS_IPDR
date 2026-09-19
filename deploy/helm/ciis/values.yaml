@@ -59,3 +59,5 @@ config:
   sqsQueueName: ciis-analysis-jobs
   sqsDlqName: ciis-analysis-dlq
   workerPollSeconds: "2"
+  metricsCollectionSeconds: "15"
+  otelEndpoint: ""
