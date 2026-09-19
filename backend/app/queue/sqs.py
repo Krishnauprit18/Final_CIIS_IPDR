@@ -73,3 +73,17 @@ def queue_healthcheck() -> None:
         QueueUrl=get_analysis_queue_url(),
         AttributeNames=["QueueArn"],
     )
+
+def get_queue_metrics() -> dict[str, int]:
+    response = get_sqs_client().get_queue_attributes(
+        QueueUrl=get_analysis_queue_url(),
+        AttributeNames=[
+            "ApproximateNumberOfMessages",
+            "ApproximateNumberOfMessagesNotVisible",
+        ],
+    )
+    attrs = response.get("Attributes", {})
+    return {
+        "visible": int(attrs.get("ApproximateNumberOfMessages", "0")),
+        "inflight": int(attrs.get("ApproximateNumberOfMessagesNotVisible", "0")),
+    }
