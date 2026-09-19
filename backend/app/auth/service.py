@@ -168,6 +168,9 @@ def logout_all(user_id: int) -> None:
 
 
 def change_password(user: dict[str, Any], current_password: str, new_password: str) -> None:
+    if len(new_password) < 12:
+        raise ValueError("Password must be at least 12 characters")
+
     valid, _ = _password_matches(user, current_password)
     if not valid:
         raise ValueError("Current password is incorrect")
