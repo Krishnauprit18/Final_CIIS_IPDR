@@ -4,7 +4,7 @@ import hashlib
 import hmac
 
 from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHash, VerifyMismatchError
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
 _PASSWORD_HASHER = PasswordHasher()
 
@@ -18,14 +18,14 @@ def hash_password(password: str) -> str:
 def verify_argon2(password: str, password_hash: str) -> bool:
     try:
         return _PASSWORD_HASHER.verify(password_hash, password)
-    except (VerifyMismatchError, InvalidHash):
+    except (VerifyMismatchError, InvalidHashError):
         return False
 
 
 def needs_rehash(password_hash: str) -> bool:
     try:
         return _PASSWORD_HASHER.check_needs_rehash(password_hash)
-    except InvalidHash:
+    except InvalidHashError:
         return True
 
 
