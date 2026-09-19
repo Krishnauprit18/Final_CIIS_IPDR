@@ -9,7 +9,7 @@ from sqlalchemy import delete, select, text, update
 from app.db.models import AuditLog, AuthSession, Case, Job, SavedSearch, User
 from app.db.session import get_engine, session_scope
 
-EXPECTED_ALEMBIC_REVISION = "0002_phase5_job_correctness"
+EXPECTED_ALEMBIC_REVISION = "0003_phase15_auth_rbac"
 
 
 def _model_to_dict(instance: Any) -> Dict[str, Any]:
