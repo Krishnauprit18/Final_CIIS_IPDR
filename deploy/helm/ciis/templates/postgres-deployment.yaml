@@ -25,6 +25,7 @@ spec:
                 secretKeyRef:
                   name: ciis-runtime-secrets
                   key: POSTGRES_PASSWORD
+                  optional: false
           ports:
             - containerPort: 5432
           readinessProbe:
