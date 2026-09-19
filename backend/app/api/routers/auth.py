@@ -25,14 +25,14 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,
         secure=AUTH_COOKIE_SECURE,
         samesite="lax",
-        path="/auth",
+        path="/",
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         key=_REFRESH_COOKIE,
-        path="/auth",
+        path="/",
         httponly=True,
         secure=AUTH_COOKIE_SECURE,
         samesite="lax",
