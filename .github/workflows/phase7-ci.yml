@@ -120,7 +120,8 @@ jobs:
 
       - name: Smoke worker from same backend image
         run: |
-          timeout 8s docker run --rm --network host \
+          docker rm -f ciis-worker-smoke >/dev/null 2>&1 || true
+          docker run -d --name ciis-worker-smoke --network host \
             -e DATABASE_URL='postgresql+psycopg://ciis:ciis@127.0.0.1:5432/ciis' \
             -e STORAGE_ENDPOINT_URL='http://127.0.0.1:9000' \
             -e STORAGE_ACCESS_KEY='ciisadmin' \
@@ -133,7 +134,14 @@ jobs:
             -e SQS_ANALYSIS_QUEUE_NAME='ciis-analysis' \
             -e WORKER_POLL_SECONDS='1' \
             -e CIIS_ROLE='worker' \
-            ciis-backend:phase7 python -m app.workers.analysis_worker || test $? -eq 124
+            ciis-backend:phase7 python -m app.workers.analysis_worker
+          sleep 8
+          if ! docker inspect --format '{{.State.Running}}' ciis-worker-smoke | grep -q true; then
+            docker logs ciis-worker-smoke
+            exit 1
+          fi
+          docker logs ciis-worker-smoke
+          docker rm -f ciis-worker-smoke >/dev/null
 
       - name: Build frontend image
         working-directory: frontend
