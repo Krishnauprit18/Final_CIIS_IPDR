@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.auth import repository as auth_repository
+from app.auth.dependencies import current_user
+from app.auth.permissions import CASE_EDIT_ROLES, require_case_access, require_case_role
 from app.db.repositories import get_case_record
 from app.jobs.service import (
     create_analysis_job,
@@ -25,6 +28,7 @@ async def create_case_analysis(
     case_id: int,
     dataset_file: UploadFile = File(...),
     case_file: UploadFile | None = File(None),
+    user: dict = Depends(current_user),
 ):
     case = get_case_record(case_id)
 
@@ -33,6 +37,8 @@ async def create_case_analysis(
             status_code=404,
             detail="Case not found",
         )
+
+    require_case_role(user, case_id, CASE_EDIT_ROLES)
 
     if not dataset_file.filename:
         raise HTTPException(
@@ -102,6 +108,15 @@ async def create_case_analysis(
             detail="Unable to queue analysis job",
         ) from exc
 
+    auth_repository.log_audit_event(
+        actor_user_id=int(user["id"]),
+        action="analysis_submitted",
+        outcome="success",
+        resource_type="case",
+        resource_id=str(case_id),
+        metadata={"job_id": job["id"]},
+    )
+
     return {
         "job_id": job["id"],
         "status": "queued",
@@ -109,7 +124,7 @@ async def create_case_analysis(
 
 
 @router.get("/jobs/{job_id}")
-def get_job_status(job_id: int):
+def get_job_status(job_id: int, user: dict = Depends(current_user)):
     job = get_job(job_id)
 
     if job is None:
@@ -117,5 +132,9 @@ def get_job_status(job_id: int):
             status_code=404,
             detail="Job not found",
         )
+
+    case_id = job.get("case_id")
+    if case_id is not None:
+        require_case_access(user, int(case_id))
 
     return job
