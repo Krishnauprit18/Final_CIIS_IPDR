@@ -42,6 +42,7 @@ services:
 
       FRONTEND_ORIGIN: http://localhost:8080
       CIIS_ROLE: api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "8000:8000"
     depends_on:
@@ -70,11 +71,15 @@ services:
       SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
 
       WORKER_POLL_SECONDS: "2"
+      WORKER_METRICS_PORT: "9101"
       CIIS_ROLE: worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
 
     depends_on:
       postgres:
         condition: service_healthy
+    ports:
+      - "9101:9101"
     restart: unless-stopped
 
   frontend:
@@ -111,10 +116,32 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
       - prometheus
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel/collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4318:4318"
+    depends_on:
+      - jaeger
     restart: unless-stopped
 
 volumes:
