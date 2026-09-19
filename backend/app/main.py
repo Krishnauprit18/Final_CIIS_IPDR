@@ -14,9 +14,7 @@ from app.metrics import (
     start_background_metrics_collector,
 )
 from app.observability.tracing import configure_tracing
-from app.queue.sqs import queue_healthcheck
 from app.storage.legacy_compat import install_legacy_object_storage_compat
-from app.storage.service import verify_storage
 
 # Install runtime compatibility boundaries before routers capture handler
 # callables. This preserves the public API while moving persistence to
@@ -79,9 +77,9 @@ def create_app() -> FastAPI:
 
     @application.on_event("startup")
     def _startup() -> None:
+        # Process startup must not be coupled to transient S3/SQS availability.
+        # Kubernetes readiness owns dependency gating; liveness remains process-only.
         legacy_handlers.startup_event()
-        verify_storage()
-        queue_healthcheck()
         start_background_metrics_collector()
 
     return application
