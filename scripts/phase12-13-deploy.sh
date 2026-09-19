@@ -2,9 +2,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TF_DIR="$ROOT/infra/terraform/environments/local"
 cd "$ROOT"
 
-for cmd in aws docker kubectl helm; do
+for cmd in aws docker kubectl helm terraform; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Missing required command: $cmd"
     exit 1
@@ -14,8 +15,11 @@ done
 export AWS_ENDPOINT_URL="http://localhost:4566"
 export AWS_DEFAULT_REGION="us-east-1"
 export AWS_REGION="us-east-1"
-export AWS_ACCESS_KEY_ID="test"
-export AWS_SECRET_ACCESS_KEY="test"
+
+# Use the dedicated IAM principal created by Terraform. Floci EKS deliberately
+# rejects test/test for Kubernetes authentication.
+export AWS_ACCESS_KEY_ID="$(terraform -chdir="$TF_DIR" output -raw kube_admin_access_key_id)"
+export AWS_SECRET_ACCESS_KEY="$(terraform -chdir="$TF_DIR" output -raw kube_admin_secret_access_key)"
 
 REGISTRY="000000000000.dkr.ecr.us-east-1.localhost:4566"
 GIT_SHA="$(git rev-parse --short HEAD)"
