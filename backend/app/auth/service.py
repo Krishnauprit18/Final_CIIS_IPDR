@@ -38,16 +38,17 @@ def _password_matches(user: dict[str, Any], password: str) -> tuple[bool, bool]:
 
 def _issue_session(user: dict[str, Any]) -> dict[str, Any]:
     roles = repository.get_roles(int(user["id"]))
+    refresh_token, refresh_hash, refresh_expires = create_refresh_token()
+    session_id = repository.create_refresh_session(
+        user_id=int(user["id"]),
+        token_hash=refresh_hash,
+        expires_at=refresh_expires,
+    )
     access_token, expires_in = create_access_token(
         user_id=int(user["id"]),
         username=str(user["username"]),
         roles=roles,
-    )
-    refresh_token, refresh_hash, refresh_expires = create_refresh_token()
-    repository.create_refresh_session(
-        user_id=int(user["id"]),
-        token_hash=refresh_hash,
-        expires_at=refresh_expires,
+        session_id=session_id,
     )
     return {
         "success": True,
