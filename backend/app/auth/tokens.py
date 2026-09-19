@@ -18,13 +18,20 @@ def _secret() -> str:
     return AUTH_SECRET
 
 
-def create_access_token(*, user_id: int, username: str, roles: list[str]) -> tuple[str, int]:
+def create_access_token(
+    *,
+    user_id: int,
+    username: str,
+    roles: list[str],
+    session_id: str,
+) -> tuple[str, int]:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=ACCESS_TOKEN_MINUTES)
     payload = {
         "sub": str(user_id),
         "username": username,
         "roles": roles,
+        "sid": session_id,
         "type": "access",
         "iat": int(now.timestamp()),
         "exp": int(expires.timestamp()),
