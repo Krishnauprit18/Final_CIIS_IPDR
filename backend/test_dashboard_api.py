@@ -5,8 +5,6 @@ Tests all backend endpoints needed for the dashboard
 """
 
 import requests
-import json
-import pandas as pd
 import time
 
 API_URL = 'http://localhost:8000'
@@ -147,7 +145,7 @@ def test_dashboard_api():
         print("="*80)
         print("✅ Dashboard API endpoints tested successfully!")
         
-        print(f"\nAPI Endpoints Tested:")
+        print("\nAPI Endpoints Tested:")
         print("• ✅ Server connectivity - Backend running properly")  
         print("• ✅ File upload - IPDR data processing functional")
         print("• ✅ Dashboard statistics - Overview metrics available")
@@ -158,7 +156,7 @@ def test_dashboard_api():
         print("• ✅ IP search - Address lookup operational") 
         print("• ✅ Date range search - Time filtering working")
         
-        print(f"\nDashboard Features Ready:")
+        print("\nDashboard Features Ready:")
         print("• Interactive data upload and processing")
         print("• Real-time statistics and metrics display")
         print("• Extracted phone numbers with risk assessment")

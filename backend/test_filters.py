@@ -6,7 +6,6 @@ Test script for communication filtering functionality with synthetic.csv
 import pandas as pd
 import sys
 import os
-import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from communication_filters import CommunicationFilters
@@ -264,11 +263,11 @@ def test_communication_filters():
         print("• Statistical Reporting - Detailed filter effectiveness metrics")
         print("• Investigation Recommendations - AI-driven suggestions")
         
-        print(f"\nData Processing Summary:")
+        print("\nData Processing Summary:")
         print(f"• Original dataset: {len(data):,} records")
-        print(f"• Investigation-relevant data typically: 20-60% of original")
-        print(f"• High-risk sessions: Usually 1-5% of filtered data")
-        print(f"• Filtering reduces analysis workload by 40-80%")
+        print("• Investigation-relevant data typically: 20-60% of original")
+        print("• High-risk sessions: Usually 1-5% of filtered data")
+        print("• Filtering reduces analysis workload by 40-80%")
         
         return True
         

@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from app.main import app
 from app.core.config import DATASET_FILE, PROJECT_ROOT

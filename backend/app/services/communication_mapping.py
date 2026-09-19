@@ -1,17 +1,12 @@
 import pandas as pd
 import networkx as nx
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Set, Any
-import json
+from typing import Dict
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.colors import LinearSegmentedColormap
-import seaborn as sns
-from collections import defaultdict, Counter
+from collections import Counter
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import plotly.offline as pyo
 from datetime import datetime, timedelta
 import base64
 from io import BytesIO
@@ -220,7 +215,7 @@ class CommunicationMapper:
                         self.phone_network.add_edge(phone1, phone2, 
                                                    connection_type='temporal_proximity',
                                                    time_diff=abs(time1 - time2).total_seconds())
-                except:
+                except Exception:
                     continue
     
     def _create_customer_connections(self, customer_comms):

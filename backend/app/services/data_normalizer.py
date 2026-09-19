@@ -3,12 +3,10 @@ import json
 import xml.etree.ElementTree as ET
 import re
 import csv
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Optional, Union
 from datetime import datetime
-import os
 from pathlib import Path
 import chardet
-from io import StringIO
 import yaml
 
 class DataNormalizer:
@@ -517,11 +515,11 @@ class DataNormalizer:
         for field, field_type in self.STANDARD_SCHEMA.items():
             if field in data.columns:
                 try:
-                    if field_type == int:
+                    if field_type is int:
                         data[field] = pd.to_numeric(data[field], errors='coerce').fillna(0).astype(int)
-                    elif field_type == float:
+                    elif field_type is float:
                         data[field] = pd.to_numeric(data[field], errors='coerce').fillna(0.0)
-                    elif field_type == str:
+                    elif field_type is str:
                         data[field] = data[field].astype(str).fillna('')
                 except Exception:
                     # If conversion fails, use default values
@@ -641,9 +639,9 @@ class DataNormalizer:
         
         if field_name in defaults:
             return defaults[field_name]
-        elif field_type == int:
+        elif field_type is int:
             return 0
-        elif field_type == float:
+        elif field_type is float:
             return 0.0
         else:
             return ''
@@ -763,8 +761,6 @@ class DataNormalizer:
             return {}
         
         custom_mapping = {}
-        sample_columns = [col.lower() for col in sample_data.columns]
-        
         # Analyze column patterns and suggest mappings
         for standard_field in self.STANDARD_SCHEMA.keys():
             standard_lower = standard_field.lower().replace(' ', '_')

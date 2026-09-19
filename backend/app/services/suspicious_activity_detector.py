@@ -1,16 +1,9 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Set, Any
-import json
-from datetime import datetime, timedelta
-from collections import defaultdict, Counter
-import statistics
+from typing import Dict, List
+from datetime import datetime
 import warnings
-from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
-from sklearn.cluster import DBSCAN
-from sklearn.svm import OneClassSVM
-import scipy.stats as stats
 warnings.filterwarnings('ignore')
 
 class SuspiciousActivityDetector:
@@ -531,7 +524,7 @@ class SuspiciousActivityDetector:
                         'unique_ips': feature_data.iloc[idx]['Destination IP_nunique']
                     },
                     'suspicion_score': min(100, abs(anomaly_scores_normalized[idx]) * 100),
-                    'description': f"Statistical anomaly detected in communication patterns"
+                    'description': "Statistical anomaly detected in communication patterns"
                 }
                 alerts.append(alert)
                 

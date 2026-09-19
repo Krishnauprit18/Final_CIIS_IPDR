@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import App from './App';
 
 jest.mock('axios', () => {
   const client = {
@@ -23,8 +24,6 @@ jest.mock('axios', () => {
     },
   };
 });
-
-import App from './App';
 
 test('renders IPDR application shell', async () => {
   render(<App />);
