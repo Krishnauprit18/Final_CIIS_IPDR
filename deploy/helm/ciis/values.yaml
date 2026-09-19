@@ -51,10 +51,11 @@ postgres:
 
 config:
   frontendOrigin: http://localhost:8088
-  storageEndpointUrl: http://floci:4566
+  flociIp: 127.0.0.1
+  storageEndpointUrl: http://floci-local:4566
   storageBucket: ciis-raw-files
   storageRegion: us-east-1
-  sqsEndpointUrl: http://floci:4566
+  sqsEndpointUrl: http://floci-local:4566
   sqsRegion: us-east-1
   sqsQueueName: ciis-analysis-jobs
   sqsDlqName: ciis-analysis-dlq
