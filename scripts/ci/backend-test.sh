@@ -4,6 +4,8 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+export CI_POSTGRES_PORT="${CI_POSTGRES_PORT:-55432}"
+
 cleanup() {
   docker compose -f compose.db.yaml down >/dev/null 2>&1 || true
 }
@@ -35,7 +37,7 @@ docker exec "$POSTGRES_CONTAINER" \
 
 cd backend
 
-export DATABASE_URL='postgresql+psycopg://ciis:ciis@127.0.0.1:5432/ciis'
+export DATABASE_URL="postgresql+psycopg://ciis:ciis@127.0.0.1:${CI_POSTGRES_PORT}/ciis"
 
 python -m alembic upgrade head
 python -m alembic current
