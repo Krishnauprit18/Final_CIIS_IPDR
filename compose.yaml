@@ -37,7 +37,7 @@ services:
       SQS_SECRET_KEY: test
       SQS_ANALYSIS_QUEUE_NAME: ciis-analysis
       SQS_ANALYSIS_DLQ_NAME: ciis-analysis-dlq
-      FRONTEND_ORIGIN: http://localhost:8080
+      FRONTEND_ORIGIN: http://localhost:8088
       CIIS_ROLE: api
       METRICS_COLLECTION_SECONDS: "15"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -85,7 +85,7 @@ services:
         REACT_APP_API_BASE_URL: /api
     image: ciis-frontend:phase16
     ports:
-      - "8080:8080"
+      - "8088:8080"
     depends_on:
       api:
         condition: service_healthy
