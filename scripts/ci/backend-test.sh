@@ -6,10 +6,21 @@ cd "$ROOT"
 
 CI_VENV="${CI_VENV:-$ROOT/.ci-venv}"
 PYTHON="$CI_VENV/bin/python"
-export CI_POSTGRES_PORT="${CI_POSTGRES_PORT:-55432}"
+COMPOSE_PROJECT="${CI_DB_COMPOSE_PROJECT:-ciis-ci-db-${BUILD_NUMBER:-$$}}"
+
+free_port() {
+  python3 - <<'PY'
+import socket
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+export CI_POSTGRES_PORT="${CI_POSTGRES_PORT:-$(free_port)}"
 
 cleanup() {
-  docker compose -f compose.db.yaml down >/dev/null 2>&1 || true
+  docker compose -p "$COMPOSE_PROJECT" -f compose.db.yaml down -v >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT
@@ -20,10 +31,12 @@ if [ ! -x "$PYTHON" ]; then
   "$PYTHON" -m pip install -r "$ROOT/backend/requirements-dev.txt"
 fi
 
-docker compose -f compose.db.yaml up -d
+echo "CI PostgreSQL host port: $CI_POSTGRES_PORT"
+
+docker compose -p "$COMPOSE_PROJECT" -f compose.db.yaml up -d
 
 POSTGRES_CONTAINER="$(
-  docker compose -f compose.db.yaml ps -q postgres
+  docker compose -p "$COMPOSE_PROJECT" -f compose.db.yaml ps -q postgres
 )"
 
 if [ -z "$POSTGRES_CONTAINER" ]; then
@@ -42,6 +55,7 @@ done
 
 if [ "$postgres_ready" != true ]; then
   echo "PostgreSQL did not become ready within 120 seconds." >&2
+  docker logs "$POSTGRES_CONTAINER" >&2 || true
   exit 1
 fi
 
