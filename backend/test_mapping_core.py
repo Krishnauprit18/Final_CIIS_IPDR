@@ -36,7 +36,7 @@ def test_core_mapping_functionality():
         print("✅ CommunicationMapper initialized")
         
         # Test 1: Connection Tables
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 1: Connection Tables")
         print("="*50)
         
@@ -62,7 +62,7 @@ def test_core_mapping_functionality():
             print(f"❌ Customer table failed: {str(e)}")
         
         # Test 2: Communication Matrices
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 2: Communication Matrices")
         print("="*50)
         
@@ -75,7 +75,7 @@ def test_core_mapping_functionality():
                 print(f"❌ {matrix_type.capitalize()} matrix failed: {str(e)}")
         
         # Test 3: Network Statistics
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 3: Network Statistics")
         print("="*50)
         
@@ -100,7 +100,7 @@ def test_core_mapping_functionality():
             print(f"❌ Statistics failed: {str(e)}")
         
         # Test 4: Mapping Statistics
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 4: Mapping Statistics")
         print("="*50)
         
@@ -116,7 +116,7 @@ def test_core_mapping_functionality():
             print(f"❌ Mapping statistics failed: {str(e)}")
         
         # Test 5: Export Tables
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 5: Export All Tables")
         print("="*50)
         
@@ -139,7 +139,7 @@ def test_core_mapping_functionality():
             print(f"❌ Export tables failed: {str(e)}")
         
         # Test 6: Network Structure Analysis
-        print(f"\n" + "="*50) 
+        print("\n" + "="*50)
         print("TEST 6: Network Structure Analysis")
         print("="*50)
         
@@ -148,7 +148,7 @@ def test_core_mapping_functionality():
             
             # Analyze phone network
             G_phone = mapper.phone_network
-            print(f"✅ Phone network analysis:")
+            print("✅ Phone network analysis:")
             print(f"   Nodes: {G_phone.number_of_nodes()}")
             print(f"   Edges: {G_phone.number_of_edges()}")
             if G_phone.number_of_nodes() > 0:
@@ -156,7 +156,7 @@ def test_core_mapping_functionality():
             
             # Analyze IP network
             G_ip = mapper.ip_network
-            print(f"✅ IP network analysis:")
+            print("✅ IP network analysis:")
             print(f"   Nodes: {G_ip.number_of_nodes()}")
             print(f"   Edges: {G_ip.number_of_edges()}")
             if G_ip.number_of_nodes() > 0:
@@ -164,7 +164,7 @@ def test_core_mapping_functionality():
             
             # Analyze customer network
             G_customer = mapper.customer_network
-            print(f"✅ Customer network analysis:")
+            print("✅ Customer network analysis:")
             print(f"   Nodes: {G_customer.number_of_nodes()}")
             print(f"   Edges: {G_customer.number_of_edges()}")
             if G_customer.number_of_nodes() > 0:
@@ -174,7 +174,7 @@ def test_core_mapping_functionality():
             print(f"❌ Network analysis failed: {str(e)}")
         
         # Test 7: Sample Data Verification
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 7: Sample Data Verification")
         print("="*50)
         
@@ -209,7 +209,7 @@ def test_core_mapping_functionality():
         print("="*80)
         print("✅ Core communication mapping functionality verified!")
         
-        print(f"\nCore Features Tested:")
+        print("\nCore Features Tested:")
         print("• ✅ Phone connection tables - Track individual phone patterns")
         print("• ✅ IP connection tables - Map source-destination communications")
         print("• ✅ Customer connection tables - Analyze customer relationships")
@@ -218,7 +218,7 @@ def test_core_mapping_functionality():
         print("• ✅ Data export capabilities - Export all tables for analysis")
         print("• ✅ Network structure analysis - Graph theory metrics")
         
-        print(f"\nInvestigation Capabilities:")
+        print("\nInvestigation Capabilities:")
         print("• Communication pattern identification")
         print("• Network relationship mapping")  
         print("• Customer behavior analysis")
@@ -226,7 +226,7 @@ def test_core_mapping_functionality():
         print("• Multi-layer network representation")
         print("• Statistical pattern recognition")
         
-        print(f"\nReady for Integration:")
+        print("\nReady for Integration:")
         print("• All core mapping functions operational")
         print("• Tables ready for dashboard integration")
         print("• Network data prepared for visualization")

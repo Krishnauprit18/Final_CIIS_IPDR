@@ -7,7 +7,6 @@ Tests creation of visual graphs and tables showing communication patterns
 import pandas as pd
 import sys
 import os
-import json
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -47,13 +46,13 @@ def test_communication_mapping():
         print(f"   Communication pairs: {mapping_stats['communication_pairs']}")
         
         # Test 1: Phone Connection Tables
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 1: Phone Connection Tables")
         print("="*60)
         
         try:
             phone_table = mapper.create_phone_connection_table()
-            print(f"✅ Phone connection table created")
+            print("✅ Phone connection table created")
             print(f"   Rows: {len(phone_table)}")
             print(f"   Columns: {list(phone_table.columns)}")
             
@@ -67,13 +66,13 @@ def test_communication_mapping():
             print(f"❌ Phone connection table failed: {str(e)}")
         
         # Test 2: IP Connection Tables
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 2: IP Connection Tables")
         print("="*60)
         
         try:
             ip_table = mapper.create_ip_connection_table()
-            print(f"✅ IP connection table created")
+            print("✅ IP connection table created")
             print(f"   Rows: {len(ip_table)}")
             print(f"   Columns: {list(ip_table.columns)}")
             
@@ -95,13 +94,13 @@ def test_communication_mapping():
             print(f"❌ IP connection table failed: {str(e)}")
         
         # Test 3: Customer Connection Tables
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 3: Customer Connection Tables")
         print("="*60)
         
         try:
             customer_table = mapper.create_customer_connection_table()
-            print(f"✅ Customer connection table created")
+            print("✅ Customer connection table created")
             print(f"   Rows: {len(customer_table)}")
             print(f"   Columns: {list(customer_table.columns)}")
             
@@ -121,7 +120,7 @@ def test_communication_mapping():
             print(f"❌ Customer connection table failed: {str(e)}")
         
         # Test 4: Communication Matrices
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 4: Communication Matrices")
         print("="*60)
         
@@ -138,13 +137,11 @@ def test_communication_mapping():
                 print(f"❌ {matrix_type.capitalize()} matrix failed: {str(e)}")
         
         # Test 5: Network Visualizations
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 5: Network Visualizations")
         print("="*60)
         
         network_types = ['phone', 'ip', 'customer', 'combined']
-        layouts = ['spring', 'circular']
-        
         for network_type in network_types:
             try:
                 # Test static visualization (base64)
@@ -175,7 +172,7 @@ def test_communication_mapping():
                 print(f"❌ {network_type.capitalize()} network visualization failed: {str(e)}")
         
         # Test 6: Geographic Visualization
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 6: Geographic Visualization")
         print("="*60)
         
@@ -192,7 +189,7 @@ def test_communication_mapping():
             print(f"❌ Geographic visualization failed: {str(e)}")
         
         # Test 7: Timeline Visualization
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 7: Timeline Visualization")
         print("="*60)
         
@@ -209,7 +206,7 @@ def test_communication_mapping():
                 peak_hour = hourly_pattern.idxmax()
                 peak_count = hourly_pattern.max()
                 
-                print(f"📊 Temporal analysis:")
+                print("📊 Temporal analysis:")
                 print(f"   Peak communication hour: {peak_hour}:00 ({peak_count} communications)")
                 print(f"   Total time span: {data_copy['Start Time'].min()} to {data_copy['Start Time'].max()}")
                 
@@ -220,7 +217,7 @@ def test_communication_mapping():
             print(f"❌ Timeline visualization failed: {str(e)}")
         
         # Test 8: Communication Statistics
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 8: Communication Statistics & Network Analysis")
         print("="*60)
         
@@ -249,7 +246,7 @@ def test_communication_mapping():
             
             # Communication patterns
             comm_patterns = stats['communication_patterns']
-            print(f"\n📈 Communication Patterns:")
+            print("\n📈 Communication Patterns:")
             print(f"   Total communications: {comm_patterns['total_communications']}")
             print(f"   Unique phones: {comm_patterns['unique_phones']}")
             print(f"   Unique customers: {comm_patterns['unique_customers']}")
@@ -258,7 +255,7 @@ def test_communication_mapping():
             
             # Geographic distribution
             geo_dist = stats['geographic_distribution']
-            print(f"\n🌍 Geographic Distribution:")
+            print("\n🌍 Geographic Distribution:")
             print(f"   Unique locations: {geo_dist['unique_locations']}")
             print(f"   Top cities: {dict(list(geo_dist['cities'].items())[:5])}")
             
@@ -266,7 +263,7 @@ def test_communication_mapping():
             print(f"❌ Communication statistics failed: {str(e)}")
         
         # Test 9: Export All Tables
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 9: Export All Tables")
         print("="*60)
         
@@ -285,7 +282,7 @@ def test_communication_mapping():
             print(f"❌ Export all tables failed: {str(e)}")
         
         # Test 10: Network Analysis (Advanced)
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST 10: Advanced Network Analysis")
         print("="*60)
         
@@ -337,7 +334,7 @@ def test_communication_mapping():
         print("="*80)
         print("✅ All communication mapping tests completed successfully!")
         
-        print(f"\nKey mapping capabilities verified:")
+        print("\nKey mapping capabilities verified:")
         print("• Phone Connection Tables - Individual phone communication patterns")
         print("• IP Connection Tables - Source-destination IP communication flows")
         print("• Customer Connection Tables - Customer relationship networks") 
@@ -349,19 +346,19 @@ def test_communication_mapping():
         print("• Network Statistics - Comprehensive network structure metrics")
         print("• Advanced Network Analysis - Centrality, clustering, components")
         
-        print(f"\nVisualization Types Generated:")
+        print("\nVisualization Types Generated:")
         print("• Network Graphs: Phone, IP, Customer, Combined networks")
         print("• Geographic Maps: Interactive location-based visualizations")
         print("• Timeline Charts: Hourly and temporal pattern analysis")
         print("• Statistical Dashboards: Network metrics and KPIs")
         
-        print(f"\nInvestigation Value:")
+        print("\nInvestigation Value:")
         print(f"• Phone networks: {mapper.phone_network.number_of_nodes()} individuals mapped")
         print(f"• IP networks: {mapper.ip_network.number_of_edges()} communication flows tracked")
         print(f"• Customer networks: {mapper.customer_network.number_of_nodes()} customer relationships")
         print(f"• Geographic coverage: {len(data)} communications across multiple cities")
-        print(f"• Network density insights for investigation prioritization")
-        print(f"• Visual pattern recognition for suspicious activity detection")
+        print("• Network density insights for investigation prioritization")
+        print("• Visual pattern recognition for suspicious activity detection")
         
         return True
         

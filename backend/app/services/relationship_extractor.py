@@ -1,6 +1,6 @@
 import pandas as pd
 import networkx as nx
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Optional, Set
 import re
 from ipaddress import ip_address, ip_network, AddressValueError
 from collections import defaultdict

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import or_, select, update
 
 from app.db.models import (
     AuditEvent,

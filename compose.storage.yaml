@@ -1,7 +1,6 @@
 services:
   minio:
     image: quay.io/minio/minio:latest
-    container_name: ciis-minio
     command: server /data --console-address ":9001"
 
     environment:
@@ -9,8 +8,8 @@ services:
       MINIO_ROOT_PASSWORD: ciisadmin123
 
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:${CI_MINIO_PORT:-59000}:9000"
+      - "127.0.0.1:${CI_MINIO_CONSOLE_PORT:-59001}:9001"
 
     volumes:
       - ciis_minio_data:/data
@@ -29,7 +28,6 @@ services:
 
   minio-init:
     image: quay.io/minio/mc:latest
-    container_name: ciis-minio-init
 
     depends_on:
       minio:

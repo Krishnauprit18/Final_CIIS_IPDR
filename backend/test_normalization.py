@@ -7,7 +7,6 @@ Tests normalization of diverse file formats and telecom provider data
 import pandas as pd
 import sys
 import os
-import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from data_normalizer import DataNormalizer
@@ -32,7 +31,7 @@ def test_data_normalization():
         # Original reference file for comparison
         reference_file = "/home/krishna/Music/CIIS (Part 2)/Scenario A1-ARFF/synthetic.csv"
         
-        print(f"\n2. Loading reference data from synthetic.csv...")
+        print("\n2. Loading reference data from synthetic.csv...")
         reference_data = pd.read_csv(reference_file)
         print(f"✅ Reference data loaded: {len(reference_data)} records")
         print(f"   Reference schema: {list(reference_data.columns)}")
@@ -78,7 +77,7 @@ def test_data_normalization():
                 else:
                     missing = expected_columns - actual_columns
                     extra = actual_columns - expected_columns
-                    print(f"⚠️  Schema compliance: Issues found")
+                    print("⚠️  Schema compliance: Issues found")
                     if missing:
                         print(f"     Missing columns: {missing}")
                     if extra:
@@ -89,9 +88,9 @@ def test_data_normalization():
                 for col, expected_type in normalizer.STANDARD_SCHEMA.items():
                     if col in normalized_data.columns:
                         actual_type = normalized_data[col].dtype
-                        if expected_type == int and not pd.api.types.is_integer_dtype(actual_type):
+                        if expected_type is int and not pd.api.types.is_integer_dtype(actual_type):
                             data_type_issues += 1
-                        elif expected_type == float and not pd.api.types.is_numeric_dtype(actual_type):
+                        elif expected_type is float and not pd.api.types.is_numeric_dtype(actual_type):
                             data_type_issues += 1
                 
                 if data_type_issues == 0:
@@ -126,7 +125,7 @@ def test_data_normalization():
                 })
         
         # Test 4: Multi-file normalization
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Multi-file Batch Normalization")
         print("="*60)
         
@@ -135,7 +134,7 @@ def test_data_normalization():
         
         try:
             combined_data = normalizer.normalize_multiple_files(successful_files, provider="auto")
-            print(f"✅ Batch normalization successful")
+            print("✅ Batch normalization successful")
             print(f"   Combined records: {len(combined_data)}")
             print(f"   Files processed: {len(successful_files)}")
             
@@ -152,7 +151,7 @@ def test_data_normalization():
             print(f"❌ Batch normalization failed: {str(e)}")
         
         # Test 5: Custom mapping creation
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Custom Mapping Creation")
         print("="*60)
         
@@ -175,14 +174,14 @@ def test_data_normalization():
                     test_mapping_file, provider="custom", custom_mapping=custom_mapping
                 )
                 
-                print(f"✅ Custom mapping normalization successful")
+                print("✅ Custom mapping normalization successful")
                 print(f"   Records normalized: {len(normalized_with_mapping)}")
                 
             except Exception as e:
                 print(f"❌ Custom mapping test failed: {str(e)}")
         
         # Test 6: Format detection
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Automatic Format Detection")
         print("="*60)
         
@@ -201,7 +200,7 @@ def test_data_normalization():
                 print(f"   {status} {os.path.basename(file_path)}: detected={detected_format}, expected={expected_format}")
         
         # Test 7: Provider detection
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Automatic Provider Detection")
         print("="*60)
         
@@ -224,7 +223,7 @@ def test_data_normalization():
                     print(f"   ❌ {os.path.basename(test_file['path'])}: Detection failed - {str(e)}")
         
         # Test 8: Data validation and cleaning
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Data Validation and Cleaning")
         print("="*60)
         
@@ -260,7 +259,7 @@ def test_data_normalization():
                     print(f"     Valid coordinates: {valid_coords}/{len(data)}")
         
         # Test 9: Normalization statistics
-        print(f"\n" + "="*60)
+        print("\n" + "="*60)
         print("TEST: Normalization Statistics")
         print("="*60)
         
@@ -282,7 +281,7 @@ def test_data_normalization():
         print("="*80)
         print("✅ All normalization tests completed!")
         
-        print(f"\nKey normalization capabilities verified:")
+        print("\nKey normalization capabilities verified:")
         print("• Multi-format support: CSV, JSON, XML, TXT, TSV, YAML, LOG")
         print("• Provider-specific field mapping: Airtel, Jio, Vodafone, Generic")
         print("• Automatic format detection and encoding handling")
@@ -292,17 +291,17 @@ def test_data_normalization():
         print("• Schema compliance and type enforcement")
         print("• Statistical reporting and error handling")
         
-        print(f"\nNormalization Results:")
+        print("\nNormalization Results:")
         successful_count = len([r for r in normalized_results if r['success']])
         total_count = len(normalized_results)
         total_records = sum(r['records'] for r in normalized_results if r['success'])
         
         print(f"• Successfully normalized: {successful_count}/{total_count} files")
         print(f"• Total records normalized: {total_records:,}")
-        print(f"• All data conforms to synthetic.csv standard schema")
-        print(f"• Cross-provider compatibility achieved")
+        print("• All data conforms to synthetic.csv standard schema")
+        print("• Cross-provider compatibility achieved")
         
-        print(f"\nSupported Formats and Providers:")
+        print("\nSupported Formats and Providers:")
         print(f"• File Formats: {', '.join(normalizer.get_supported_formats())}")
         print(f"• Telecom Providers: {', '.join(normalizer.provider_mappings.keys())}")
         

@@ -42,7 +42,6 @@ def _load_env_file(path: str) -> None:
         pass
 
 # Assuming parser.py will contain the core parsing logic
-from parser import parse_log_data
 from relationship_extractor import RelationshipExtractor
 from communication_filters import CommunicationFilters
 from data_normalizer import DataNormalizer
@@ -404,7 +403,8 @@ def startup_event():
                 ALLOWLIST_IPS = set(map(str, allow or []))
                 DENYLIST_IPS = set(map(str, deny or []))
         except Exception:
-            ALLOWLIST_IPS.clear(); DENYLIST_IPS.clear()
+            ALLOWLIST_IPS.clear()
+            DENYLIST_IPS.clear()
 
 @app.get("/")
 def read_root():
@@ -598,7 +598,7 @@ async def process_data(persist: bool = False, chunksize: Optional[int] = None):
 
         saved_path = _persist_processed_data(processed_data_store, "processed") if persist else None
         response = {
-            "message": f"File 'synthetic.csv' processed successfully.",
+            "message": "File 'synthetic.csv' processed successfully.",
             "records_found": len(processed_data_store),
             "normalization_stats": normalization_stats,
             "persisted": bool(saved_path),
@@ -855,9 +855,6 @@ def _make_details_html_from_row(row: pd.Series) -> str:
     return html
 
 def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map") -> str:
-    import json
-    # Read Mapbox token from environment if available
-    mapbox_token = os.getenv("MAPBOX_TOKEN") or os.getenv("MAPBOX_ACCESS_TOKEN") or ""
     # Prepare arrays
     lats = [p.get('lat', 0.0) for p in points]
     lons = [p.get('lon', 0.0) for p in points]
@@ -947,7 +944,6 @@ def _build_plotly_map_html(points: List[Dict[str, Any]], title: str = "Geo Map")
     """
 
 def _build_leaflet_map_html(points: List[Dict[str, Any]], polylines: List[Dict[str, Any]] = None, title: str = "Geo Map") -> str:
-    import json
     polylines = polylines or []
     # Compute center
     if points:
@@ -1724,7 +1720,6 @@ def link_analysis_phone_map_html(phone: str, limit: int = 10, days: int = 30):
                 pair_count += 1
 
     # Build HTML with markers + lines
-    import json
     markers_html = _build_plotly_map_html(points, title=f"Link Analysis Map — {suspect}")
     inject = f"""
 <script>
@@ -1838,7 +1833,7 @@ def link_analysis_phone_phone_map_html(phone: str, limit: int = 10, days: int = 
     neighbors = []
     for ph, cnt in top:
         nrow = last_row_for_phone(ph)
-        if not nrow is None:
+        if nrow is not None:
             lat = float(nrow.get('Latitude', 0.0) or 0.0)
             lon = float(nrow.get('Longitude', 0.0) or 0.0)
             if lat == 0.0 and lon == 0.0:
@@ -1856,7 +1851,6 @@ def link_analysis_phone_phone_map_html(phone: str, limit: int = 10, days: int = 
             sl_lons += [s_lon, lon, None]
 
     # Add lines between neighbor phones if they directly communicated
-    neigh_set = {ph for ph, _, _ in neighbors}
     if 'B-Phone' in dfw.columns:
         # Create a set of observed (A,B) pairs within window
         pairs = set(zip(dfw['Phone'].astype(str), dfw['B-Phone'].astype(str)))
@@ -1875,7 +1869,6 @@ def link_analysis_phone_phone_map_html(phone: str, limit: int = 10, days: int = 
                     cnt_pairs += 1
 
     # Render map with markers and dashed lines
-    import json
     markers_html = _build_plotly_map_html(points, title=f"Phone Network Map — {suspect}")
     inject = f"""
 <script>
@@ -3413,7 +3406,6 @@ def save_search_to_case(case_id: int, payload: SaveSearchRequest, session: Dict 
     if cur.fetchone() is None:
         conn.close()
         raise HTTPException(status_code=404, detail="Case not found")
-    import json
     cur.execute(
         "INSERT INTO saved_searches (case_id, criteria_json, notes, created_at) VALUES (?, ?, ?, ?)",
         (case_id, json.dumps(payload.criteria_json), payload.notes or "", datetime.now().isoformat()),
@@ -3460,7 +3452,7 @@ def export_case_pack(case_id: int, session: Dict = Depends(verify_token)):
         bparty = {"ips": {}, "phones": {}}
 
     # Write pack
-    import json, zipfile
+    import zipfile
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     zip_path = os.path.join(UPLOAD_DIR, f"case_{case_id}_pack.zip")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:

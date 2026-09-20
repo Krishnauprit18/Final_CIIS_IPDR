@@ -1,0 +1,20 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [
+    ".venv",
+    ".venv-ci",
+    "__pycache__",
+    ".pytest_cache",
+    "node_modules",
+    "frontend/build",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# These imports intentionally run after the legacy compatibility boundaries
+# are installed. Moving them above those boundaries would change startup order.
+"backend/app/main.py" = ["E402"]
+"backend/app/legacy_handlers.py" = ["E402"]

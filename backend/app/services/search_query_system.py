@@ -1,7 +1,6 @@
 import pandas as pd
-import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Union
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
 import ipaddress
 from dataclasses import dataclass
@@ -92,7 +91,7 @@ class SearchQuerySystem:
         """Convert IP address string to integer for efficient searching"""
         try:
             return int(ipaddress.IPv4Address(ip_str))
-        except:
+        except Exception:
             return None
             
     def _create_search_indices(self):
@@ -657,7 +656,7 @@ class SearchQuerySystem:
                 f.write(f"Total records in dataset: {search_result.total_count}\n")
                 f.write(f"Filtered records returned: {search_result.filtered_count}\n")
                 f.write(f"Search time: {search_result.search_time_ms:.2f} ms\n")
-                f.write(f"Search criteria used:\n")
+                f.write("Search criteria used:\n")
                 for criteria in search_result.criteria_used:
                     f.write(f"  - {criteria.field} {criteria.operator.value} '{criteria.value}'\n")
         

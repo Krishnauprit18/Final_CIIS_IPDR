@@ -1,7 +1,6 @@
 services:
   localstack:
     image: localstack/localstack:3
-    container_name: ciis-localstack
 
     environment:
       SERVICES: sqs
@@ -9,7 +8,7 @@ services:
       DEBUG: 0
 
     ports:
-      - "4566:4566"
+      - "127.0.0.1:${CI_LOCALSTACK_PORT:-54566}:4566"
 
     volumes:
       - ciis_localstack_data:/var/lib/localstack

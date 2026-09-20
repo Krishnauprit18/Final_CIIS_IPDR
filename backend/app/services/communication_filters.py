@@ -1,11 +1,7 @@
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Dict, List, Tuple
 import re
-from datetime import datetime, timedelta
 from ipaddress import ip_address, AddressValueError
-from collections import defaultdict
-import json
 
 class CommunicationFilters:
     """
@@ -416,7 +412,7 @@ class CommunicationFilters:
             if hour_match:
                 hour = int(hour_match.group(1))
                 return hour >= 22 or hour <= 5
-        except:
+        except Exception:
             pass
         return False
     
@@ -433,7 +429,7 @@ class CommunicationFilters:
                     return start_hour <= hour <= end_hour
                 else:  # Overnight range
                     return hour >= start_hour or hour <= end_hour
-        except:
+        except Exception:
             pass
         return False
     

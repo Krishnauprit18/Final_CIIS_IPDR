@@ -36,7 +36,7 @@ def test_search_query_system():
         print("✅ SearchQuerySystem initialized")
         
         # Test 1: Phone Number Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 1: Phone Number Search")
         print("="*50)
         
@@ -58,7 +58,7 @@ def test_search_query_system():
             print(f"❌ Phone search failed: {str(e)}")
         
         # Test 2: IP Address Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 2: IP Address Search")
         print("="*50)
         
@@ -80,7 +80,7 @@ def test_search_query_system():
             print(f"❌ IP address search failed: {str(e)}")
         
         # Test 3: Date Range Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 3: Date Range Search")
         print("="*50)
         
@@ -104,7 +104,7 @@ def test_search_query_system():
             print(f"❌ Date range search failed: {str(e)}")
         
         # Test 4: Communication Type Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 4: Communication Type Search")
         print("="*50)
         
@@ -127,7 +127,7 @@ def test_search_query_system():
             print(f"❌ Communication type search failed: {str(e)}")
         
         # Test 5: Customer Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 5: Customer Search")
         print("="*50)
         
@@ -148,7 +148,7 @@ def test_search_query_system():
             print(f"❌ Customer search failed: {str(e)}")
         
         # Test 6: Advanced Search
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 6: Advanced Search with Multiple Criteria")
         print("="*50)
         
@@ -168,7 +168,7 @@ def test_search_query_system():
             )
             print(f"✅ Advanced search: {result_advanced.filtered_count} records found")
             print(f"   Search time: {result_advanced.search_time_ms:.2f} ms")
-            print(f"   Criteria: TCP protocol AND duration > 100s")
+            print("   Criteria: TCP protocol AND duration > 100s")
             
             # Test OR combination
             result_or = search_system.advanced_search(
@@ -182,7 +182,7 @@ def test_search_query_system():
             print(f"❌ Advanced search failed: {str(e)}")
         
         # Test 7: Search Suggestions
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 7: Search Suggestions")
         print("="*50)
         
@@ -205,7 +205,7 @@ def test_search_query_system():
             print(f"❌ Search suggestions failed: {str(e)}")
         
         # Test 8: Search Statistics
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 8: Search Statistics")
         print("="*50)
         
@@ -225,7 +225,7 @@ def test_search_query_system():
             print(f"❌ Search statistics failed: {str(e)}")
         
         # Test 9: Performance Testing
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 9: Performance Testing")
         print("="*50)
         
@@ -257,7 +257,7 @@ def test_search_query_system():
             print(f"❌ Performance testing failed: {str(e)}")
         
         # Test 10: Export Functionality
-        print(f"\n" + "="*50)
+        print("\n" + "="*50)
         print("TEST 10: Export Functionality")
         print("="*50)
         
@@ -293,7 +293,7 @@ def test_search_query_system():
         print("="*80)
         print("✅ Search and query system functionality verified!")
         
-        print(f"\nSearch Capabilities Tested:")
+        print("\nSearch Capabilities Tested:")
         print("• ✅ Phone number search - Exact and partial matching")
         print("• ✅ IP address search - Source, destination, and NAT IP")
         print("• ✅ Date range filtering - Flexible time period searches")
@@ -305,7 +305,7 @@ def test_search_query_system():
         print("• ✅ Performance optimization - Fast query execution")
         print("• ✅ Export functionality - CSV export with metadata")
         
-        print(f"\nInvestigative Features:")
+        print("\nInvestigative Features:")
         print("• Fast search across all IPDR fields")
         print("• Flexible filtering with multiple operators")
         print("• Date and time range analysis")
@@ -316,7 +316,7 @@ def test_search_query_system():
         print("• Auto-completion for efficient searching")
         print("• Export capabilities for further analysis")
         
-        print(f"\nReady for Integration:")
+        print("\nReady for Integration:")
         print("• All search functions operational")
         print("• Fast query performance verified")
         print("• Export system functional")

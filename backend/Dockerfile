@@ -10,6 +10,12 @@ RUN python -m pip install --upgrade pip && \
 
 FROM python:3.10.15-slim-bookworm AS runtime
 
+# Pull current Debian security fixes into the runtime image so CI vulnerability
+# scanning is evaluating the application on patched base packages.
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
