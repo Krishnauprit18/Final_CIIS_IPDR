@@ -9,7 +9,7 @@ services:
       DEBUG: 0
 
     ports:
-      - "4566:4566"
+      - "${CI_LOCALSTACK_PORT:-54566}:4566"
 
     volumes:
       - ciis_localstack_data:/var/lib/localstack
