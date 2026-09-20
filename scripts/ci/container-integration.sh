@@ -34,6 +34,7 @@ export CI_LOCALSTACK_PORT
 cleanup() {
   set +e
   docker rm -f ciis-ci-api-$RUN_ID >/dev/null 2>&1 || true
+  docker rm -f ciis-ci-worker-$RUN_ID >/dev/null 2>&1 || true
   docker compose -p "$DB_PROJECT" -f compose.db.yaml down -v >/dev/null 2>&1 || true
   docker compose -p "$STORAGE_PROJECT" -f compose.storage.yaml down -v >/dev/null 2>&1 || true
   docker compose -p "$QUEUE_PROJECT" -f compose.queue.yaml down -v >/dev/null 2>&1 || true
@@ -49,7 +50,7 @@ echo "  LocalStack: $CI_LOCALSTACK_PORT"
 echo "  API:        $CI_API_PORT"
 
 docker compose -p "$DB_PROJECT" -f compose.db.yaml up -d
-docker compose -p "$STORAGE_PROJECT" -f compose.storage.yaml up -d
+docker compose -p "$STORAGE_PROJECT" -f compose.storage.yaml up -d minio
 docker compose -p "$QUEUE_PROJECT" -f compose.queue.yaml up -d
 
 POSTGRES_CONTAINER="$(
@@ -90,9 +91,16 @@ if [ "$minio_ready" != true ]; then
   exit 1
 fi
 
-export AWS_ACCESS_KEY_ID='test'
-export AWS_SECRET_ACCESS_KEY='test'
 export AWS_DEFAULT_REGION='us-east-1'
+
+# MinIO uses its own credentials. The test/test credentials below are only
+# for LocalStack and must not be used for the S3-compatible MinIO check.
+export AWS_ACCESS_KEY_ID='ciisadmin'
+export AWS_SECRET_ACCESS_KEY='ciisadmin123'
+
+# minio-init is a one-shot Compose service. Run it synchronously so the
+# bucket exists before the host-side S3 readiness check starts.
+docker compose -p "$STORAGE_PROJECT" -f compose.storage.yaml run --rm minio-init
 
 storage_ready=false
 for _ in $(seq 1 60); do
@@ -104,10 +112,14 @@ for _ in $(seq 1 60); do
 done
 
 if [ "$storage_ready" != true ]; then
+  docker compose -p "$STORAGE_PROJECT" -f compose.storage.yaml ps -a >&2 || true
   echo "MinIO bucket ciis-storage did not become ready." >&2
   exit 1
 fi
 
+# LocalStack uses the dummy test credentials expected by its AWS emulator.
+export AWS_ACCESS_KEY_ID='test'
+export AWS_SECRET_ACCESS_KEY='test'
 localstack_ready=false
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:$CI_LOCALSTACK_PORT/_localstack/health" >/dev/null 2>&1; then
@@ -140,6 +152,7 @@ DATABASE_URL="postgresql+psycopg://ciis:ciis@127.0.0.1:$CI_POSTGRES_PORT/ciis"
 STORAGE_ENDPOINT_URL="http://127.0.0.1:$CI_MINIO_PORT"
 SQS_ENDPOINT_URL="http://127.0.0.1:$CI_LOCALSTACK_PORT"
 API_CONTAINER="ciis-ci-api-$RUN_ID"
+WORKER_CONTAINER="ciis-ci-worker-$RUN_ID"
 
 docker run --rm   --network host   -e "DATABASE_URL=$DATABASE_URL"   "$BACKEND_IMAGE"   python -m alembic upgrade head
 
@@ -163,14 +176,43 @@ fi
 curl -fsS "http://127.0.0.1:$CI_API_PORT/health/live" >/dev/null
 curl -fsS "http://127.0.0.1:$CI_API_PORT/health/ready" >/dev/null
 
-set +e
-timeout 20s docker run --rm   --network host   -e "DATABASE_URL=$DATABASE_URL"   -e "STORAGE_ENDPOINT_URL=$STORAGE_ENDPOINT_URL"   -e STORAGE_ACCESS_KEY='ciisadmin'   -e STORAGE_SECRET_KEY='ciisadmin123'   -e STORAGE_BUCKET='ciis-storage'   -e "SQS_ENDPOINT_URL=$SQS_ENDPOINT_URL"   -e SQS_REGION='us-east-1'   -e SQS_ACCESS_KEY='test'   -e SQS_SECRET_KEY='test'   -e SQS_ANALYSIS_QUEUE_NAME='ciis-analysis'   -e SQS_ANALYSIS_DLQ_NAME='ciis-analysis-dlq'   -e WORKER_POLL_SECONDS='1'   -e CIIS_ROLE='worker'   "$BACKEND_IMAGE"   python -m app.workers.analysis_worker
-worker_exit_code=$?
-set -e
+# Run the worker detached so the Docker container itself can be observed and
+# explicitly removed. Killing a `timeout docker run --rm` client can leave the
+# worker alive on the daemon and make the CI step hang.
+docker run -d \
+  --name "$WORKER_CONTAINER" \
+  --network host \
+  -e "DATABASE_URL=$DATABASE_URL" \
+  -e "STORAGE_ENDPOINT_URL=$STORAGE_ENDPOINT_URL" \
+  -e STORAGE_ACCESS_KEY='ciisadmin' \
+  -e STORAGE_SECRET_KEY='ciisadmin123' \
+  -e STORAGE_BUCKET='ciis-storage' \
+  -e "SQS_ENDPOINT_URL=$SQS_ENDPOINT_URL" \
+  -e SQS_REGION='us-east-1' \
+  -e SQS_ACCESS_KEY='test' \
+  -e SQS_SECRET_KEY='test' \
+  -e SQS_ANALYSIS_QUEUE_NAME='ciis-analysis' \
+  -e SQS_ANALYSIS_DLQ_NAME='ciis-analysis-dlq' \
+  -e WORKER_POLL_SECONDS='1' \
+  -e CIIS_ROLE='worker' \
+  "$BACKEND_IMAGE" \
+  python -m app.workers.analysis_worker >/dev/null
 
-if [ "$worker_exit_code" -ne 124 ]; then
+worker_exit_code=""
+for _ in $(seq 1 20); do
+  if [ "$(docker inspect -f '{{.State.Running}}' "$WORKER_CONTAINER")" != true ]; then
+    worker_exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$WORKER_CONTAINER")"
+    break
+  fi
+  sleep 1
+done
+
+if [ -n "$worker_exit_code" ]; then
+  docker logs "$WORKER_CONTAINER" >&2 || true
   echo "Worker smoke test failed with exit code $worker_exit_code." >&2
   exit "$worker_exit_code"
 fi
+
+docker rm -f "$WORKER_CONTAINER" >/dev/null
 
 echo "Container integration checks passed."
