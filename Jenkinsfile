@@ -22,6 +22,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                deleteDir()
                 checkout scm
 
                 script {
@@ -75,6 +76,30 @@ pipeline {
             }
         }
 
+        stage('Dependency Security Scan') {
+            steps {
+                sh 'bash scripts/ci/security-dependencies.sh'
+            }
+        }
+
+        stage('SAST') {
+            steps {
+                sh 'bash scripts/ci/security-sast.sh'
+            }
+        }
+
+        stage('Secret Scan') {
+            steps {
+                sh 'bash scripts/ci/security-secrets.sh'
+            }
+        }
+
+        stage('Trivy Filesystem Scan') {
+            steps {
+                sh 'bash scripts/ci/security-filesystem.sh'
+            }
+        }
+
         stage('Docker Build') {
             steps {
                 sh 'bash scripts/ci/build-images.sh'
@@ -87,6 +112,12 @@ pipeline {
             }
         }
 
+        stage('SBOM Generation') {
+            steps {
+                sh 'bash scripts/ci/generate-sbom.sh'
+            }
+        }
+
         stage('Helm Validate') {
             steps {
                 sh 'bash scripts/ci/helm-validate.sh'
@@ -96,6 +127,12 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 sh 'bash scripts/ci/terraform-validate.sh'
+            }
+        }
+
+        stage('IaC Security Scan') {
+            steps {
+                sh 'bash scripts/ci/security-iac.sh'
             }
         }
 
@@ -158,11 +195,11 @@ pipeline {
         }
 
         success {
-            echo 'CIIS Phase 18 pipeline PASSED.'
+            echo 'CIIS Phase 20 security pipeline PASSED.'
         }
 
         failure {
-            echo 'CIIS Phase 18 pipeline FAILED.'
+            echo 'CIIS Phase 20 security pipeline FAILED.'
         }
     }
 }
