@@ -21,7 +21,17 @@ KUBE_AWS_SECRET_ACCESS_KEY="$(terraform -chdir="$TF_DIR" output -raw kube_admin_
 export AWS_ACCESS_KEY_ID="$KUBE_AWS_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$KUBE_AWS_SECRET_ACCESS_KEY"
 
-aws eks update-kubeconfig --name ciis-local >/dev/null
+if ! aws eks update-kubeconfig --name ciis-local >/dev/null; then
+  # Floci can temporarily report the control plane as CREATING while the
+  # existing kubeconfig endpoint is already usable. Do not discard a working
+  # context, but fail if kubectl cannot reach the cluster either.
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    echo "Unable to configure or reach Floci EKS cluster ciis-local." >&2
+    return 1 2>/dev/null || exit 1
+  fi
+
+  echo "Warning: Floci reports ciis-local as not ACTIVE; using the existing working kubeconfig." >&2
+fi
 
 KUBE_USER="$(kubectl config view --minify -o jsonpath='{.contexts[0].context.user}')"
 if [ -z "$KUBE_USER" ]; then
