@@ -59,6 +59,7 @@ yarn-debug.log*
 **/report/
 **/generated/
 **/artifacts/
+.ci-artifacts/
 **/coverage/
 **/test-results/
 **/test-results-local/
