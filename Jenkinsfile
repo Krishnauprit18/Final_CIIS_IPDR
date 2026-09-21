@@ -164,28 +164,9 @@ pipeline {
     post {
         always {
             sh '''
-                docker rm -f \
-                    ciis-ci-api \
-                    ciis-ci-worker \
-                    ciis-worker-smoke \
-                    ciis-api \
-                    ciis-frontend \
-                    >/dev/null 2>&1 || true
-
-                docker compose \
-                    -f compose.db.yaml \
-                    down \
-                    >/dev/null 2>&1 || true
-
-                docker compose \
-                    -f compose.storage.yaml \
-                    down \
-                    >/dev/null 2>&1 || true
-
-                docker compose \
-                    -f compose.queue.yaml \
-                    down \
-                    >/dev/null 2>&1 || true
+                if [ -x scripts/ci/cleanup.sh ]; then
+                    bash scripts/ci/cleanup.sh
+                fi
             '''
 
             archiveArtifacts(
@@ -195,11 +176,11 @@ pipeline {
         }
 
         success {
-            echo 'CIIS Phase 20 security pipeline PASSED.'
+            echo 'CIIS CI pipeline, including Phase 21-24 verification, PASSED.'
         }
 
         failure {
-            echo 'CIIS Phase 20 security pipeline FAILED.'
+            echo 'CIIS CI pipeline FAILED.'
         }
     }
 }

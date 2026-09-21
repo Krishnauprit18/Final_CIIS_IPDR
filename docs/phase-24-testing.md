@@ -3,7 +3,8 @@
 ## Coverage added
 
 - Backend CI now runs the complete PostgreSQL-backed suite with `pytest-cov`
-  and archives `.ci-artifacts/backend/coverage.xml`.
+  and archives `.ci-artifacts/backend/coverage.xml` plus the JUnit report at
+  `.ci-artifacts/backend/junit.xml`.
 - Frontend CI now runs lint, tests, build, and Cobertura coverage; the report
   is archived at `.ci-artifacts/frontend/coverage.xml`.
 - Reliability/data-integrity unit tests cover valid and invalid IPDR gates,
@@ -24,3 +25,7 @@
 
 The pipeline archives measurements and reports; it does not enforce an
 arbitrary coverage percentage without a baseline review.
+
+Jenkins cleanup is build-scoped. It removes only the Compose projects,
+containers, and images created by that build; it does not run a broad Docker
+prune against developer workloads on the same agent.
