@@ -70,6 +70,7 @@ export DATABASE_URL="postgresql+psycopg://ciis:ciis@127.0.0.1:${CI_POSTGRES_PORT
 "$PYTHON" -m alembic upgrade head
 "$PYTHON" -m alembic current
 "$PYTHON" -m pytest -q \
+  --junitxml="$ROOT/.ci-artifacts/backend/junit.xml" \
   --cov=app \
   --cov-report=term-missing \
   --cov-report="xml:$ROOT/.ci-artifacts/backend/coverage.xml"
