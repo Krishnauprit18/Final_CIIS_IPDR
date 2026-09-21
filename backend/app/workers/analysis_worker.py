@@ -21,17 +21,28 @@ from app.jobs.service import (
     retry_job,
     set_job_progress,
 )
+from app.db.repositories import update_job_integrity, update_job_payload
 from app.metrics import (
     ACTIVE_WORKERS,
     ANALYSIS_JOB_DURATION_SECONDS,
     ANALYSIS_JOB_FAILURES_TOTAL,
+    ANALYSIS_JOB_MISSING_OBJECTS_TOTAL,
+    ANALYSIS_JOB_QUARANTINES_TOTAL,
     ANALYSIS_JOBS_TOTAL,
     RECORDS_PROCESSED_TOTAL,
     start_worker_metrics_server,
 )
 from app.observability.tracing import configure_worker_tracing, get_tracer
 from app.queue.sqs import delete_analysis_message, receive_analysis_messages
-from app.storage.service import download_bytes, storage_uri, upload_bytes
+from app.reliability import DatasetValidationError, validate_ipdr_frame
+from app.storage.service import (
+    ObjectMissingError,
+    download_bytes,
+    quarantine_bytes,
+    sha256_bytes,
+    storage_uri,
+    upload_bytes,
+)
 from app.services.communication_mapping import CommunicationMapper
 from app.services.data_normalizer import DataNormalizer
 from app.services.suspicious_activity_detector import SuspiciousActivityDetector
@@ -82,6 +93,24 @@ def _run_analysis(df: pd.DataFrame) -> dict:
         result["alerts_error"] = str(exc)
 
     return result
+
+
+def _best_effort_update_payload(job_id: int, claimed: dict, **updates: object) -> None:
+    """Persist hashes/diagnostics without masking the worker's main outcome."""
+    try:
+        payload = json.loads(claimed.get("payload_json") or "{}")
+        payload.update(updates)
+        claimed["payload_json"] = json.dumps(payload)
+        update_job_payload(job_id, payload)
+    except Exception:
+        logger.exception("unable to persist job reliability metadata", extra={"job_id": job_id})
+
+
+def _best_effort_update_integrity(job_id: int, **values: str) -> None:
+    try:
+        update_job_integrity(job_id, **values)
+    except Exception:
+        logger.exception("unable to persist job integrity metadata", extra={"job_id": job_id})
 
 
 def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
@@ -149,9 +178,19 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
             try:
                 set_job_progress(job_id, worker_id, 10)
                 dataset_bytes = download_bytes(dataset_key)
+                input_sha256 = sha256_bytes(dataset_bytes)
+                _best_effort_update_payload(
+                    job_id,
+                    claimed,
+                    input_sha256=input_sha256,
+                )
+                _best_effort_update_integrity(job_id, input_sha256=input_sha256)
 
                 set_job_progress(job_id, worker_id, 35)
                 df = _load_dataset(dataset_bytes, dataset_filename)
+                if isinstance(df, pd.DataFrame):
+                    validation = validate_ipdr_frame(df)
+                    _best_effort_update_payload(job_id, claimed, validation=validation)
                 try:
                     record_count = len(df)
                 except TypeError:
@@ -169,13 +208,25 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
                     "analysis": result,
                 }
                 result_key = f"analysis-results/{case_id}/{job_id}/result.json"
+                result_bytes = json.dumps(
+                    result_payload,
+                    default=str,
+                    indent=2,
+                ).encode("utf-8")
 
                 set_job_progress(job_id, worker_id, 90)
                 upload_bytes(
-                    json.dumps(result_payload, default=str, indent=2).encode("utf-8"),
+                    result_bytes,
                     result_key,
                     content_type="application/json",
                 )
+                result_sha256 = sha256_bytes(result_bytes)
+                _best_effort_update_payload(
+                    job_id,
+                    claimed,
+                    result_sha256=result_sha256,
+                )
+                _best_effort_update_integrity(job_id, result_sha256=result_sha256)
                 result_uri = storage_uri(result_key)
 
                 if not complete_job(job_id, worker_id, result_uri):
@@ -187,6 +238,57 @@ def process_message(message: dict, *, worker_id: str = WORKER_ID) -> None:
                     "analysis job succeeded",
                     extra={"event": "job_succeeded", "result_uri": result_uri},
                 )
+
+            except DatasetValidationError as exc:
+                try:
+                    quarantine_key, quarantine_digest = quarantine_bytes(
+                        dataset_bytes,
+                        case_id=case_id,
+                        job_id=job_id,
+                        filename=dataset_filename,
+                        reason=str(exc),
+                    )
+                    _best_effort_update_payload(
+                        job_id,
+                        claimed,
+                        failure_class="INVALID_INPUT",
+                        validation_error=str(exc),
+                        quarantine_key=quarantine_key,
+                        quarantine_sha256=quarantine_digest,
+                    )
+                    _best_effort_update_integrity(
+                        job_id,
+                        input_sha256=quarantine_digest,
+                        quarantine_uri=storage_uri(quarantine_key),
+                    )
+                    fail_job(job_id, worker_id, f"Invalid IPDR input: {exc}")
+                    delete_analysis_message(message["ReceiptHandle"])
+                    ANALYSIS_JOB_QUARANTINES_TOTAL.inc()
+                    ANALYSIS_JOBS_TOTAL.labels(status="quarantined").inc()
+                    logger.warning(
+                        "invalid analysis input quarantined",
+                        extra={"event": "job_quarantined", "reason": str(exc)},
+                    )
+                    return
+                except Exception:
+                    logger.exception("unable to quarantine invalid analysis input")
+                    raise
+
+            except ObjectMissingError as exc:
+                _best_effort_update_payload(
+                    job_id,
+                    claimed,
+                    failure_class="MISSING_OBJECT",
+                )
+                fail_job(job_id, worker_id, str(exc))
+                delete_analysis_message(message["ReceiptHandle"])
+                ANALYSIS_JOB_MISSING_OBJECTS_TOTAL.inc()
+                ANALYSIS_JOBS_TOTAL.labels(status="missing_object").inc()
+                logger.warning(
+                    "analysis job failed because input object is missing",
+                    extra={"event": "job_missing_object", "dataset_key": dataset_key},
+                )
+                return
 
             except Exception as exc:
                 ANALYSIS_JOB_FAILURES_TOTAL.inc()

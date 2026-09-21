@@ -172,31 +172,15 @@ WORKER_VISIBILITY_TIMEOUT=2 WORKER_POLL_SECONDS=1 \
   python -m app.workers.analysis_worker
 ```
 
-Create a real job with a deliberately missing object and enqueue it:
+Enqueue a deliberately malformed message (a poison message) so the worker
+cannot parse it and SQS owns the retry/DLQ behavior:
 
 ```bash
 python - <<'PY'
-from app.db.repositories import create_job_record
 from app.queue.sqs import send_analysis_message
 
-job = create_job_record(
-    case_id=1,
-    job_type="CASE_ANALYSIS",
-    payload={
-        "case_id": 1,
-        "dataset_key": "analysis-inputs/does-not-exist.csv",
-        "case_file_key": None,
-    },
-)
-
-send_analysis_message({
-    "job_id": job["id"],
-    "case_id": 1,
-    "dataset_key": "analysis-inputs/does-not-exist.csv",
-    "case_file_key": None,
-})
-
-print(job["id"])
+send_analysis_message({"poison": True, "missing": "job_id"})
+print("poison message enqueued")
 PY
 ```
 
@@ -242,6 +226,11 @@ Phase 4 tests cover job state transitions, successful enqueue, enqueue failure c
 Local development uses LocalStack through `SQS_ENDPOINT_URL=http://localhost:4566`. In AWS, leave `SQS_ENDPOINT_URL`, `SQS_ACCESS_KEY`, and `SQS_SECRET_KEY` empty and use the normal boto3 credential provider chain/IAM role. The application code remains the same.
 
 The worker is a separate Python process and can be scaled independently from the API. Multiple workers may consume the same SQS queue; duplicate successful deliveries are acknowledged without repeating analysis.
+
+An input object that is definitively missing is now classified as a permanent
+`MISSING_OBJECT` job failure and acknowledged cleanly. It is intentionally not
+used as the DLQ smoke-test case; poison messages and transient processing
+failures are the DLQ scenarios.
 
 ## Phase 4 acceptance criteria
 

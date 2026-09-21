@@ -42,6 +42,16 @@ ANALYSIS_JOB_FAILURES_TOTAL = Counter(
     "Total failed analysis attempts",
 )
 
+ANALYSIS_JOB_QUARANTINES_TOTAL = Counter(
+    "ciis_analysis_job_quarantines_total",
+    "Invalid analysis inputs moved to quarantine",
+)
+
+ANALYSIS_JOB_MISSING_OBJECTS_TOTAL = Counter(
+    "ciis_analysis_job_missing_objects_total",
+    "Analysis jobs failed because their input object was missing",
+)
+
 FILES_UPLOADED_TOTAL = Counter(
     "ciis_files_uploaded_total",
     "Total files uploaded for asynchronous analysis",

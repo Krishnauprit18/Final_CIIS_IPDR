@@ -40,6 +40,10 @@ postgres:
   image: postgres:16-alpine
   database: ciis
   username: ciis
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
   resources:
     requests:
       cpu: 50m
