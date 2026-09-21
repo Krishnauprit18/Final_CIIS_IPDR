@@ -1,0 +1,14 @@
+# Local Floci Terraform emulator exceptions.
+# These are not wildcard suppressions. Each ID is documented in
+# docs/security-pipeline.md with owner, scope, expiry and remediation issue.
+AWS-0040
+AWS-0041
+
+# Debian Bookworm base-image advisories with no fixed package available in the
+# Debian security repositories used by python:3.10.15-slim-bookworm. These
+# are time-bounded runtime exceptions and must be re-evaluated before expiry.
+CVE-2025-7458
+CVE-2026-13221
+CVE-2026-42496
+CVE-2026-8376
+CVE-2023-45853

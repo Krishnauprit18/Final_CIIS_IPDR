@@ -12,8 +12,10 @@ FROM python:3.10.15-slim-bookworm AS runtime
 
 # Pull current Debian security fixes into the runtime image so CI vulnerability
 # scanning is evaluating the application on patched base packages.
+ARG APT_SECURITY_REFRESH=unset
 RUN apt-get update && \
-    apt-get upgrade -y && \
+    echo "$APT_SECURITY_REFRESH" >/dev/null && \
+    apt-get dist-upgrade -y && \
     rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
