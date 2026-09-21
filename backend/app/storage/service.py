@@ -3,9 +3,16 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
+import hashlib
+
+from botocore.exceptions import ClientError
 
 from app.core.config import STORAGE_BUCKET
 from app.storage.factory import get_storage_backend
+
+
+class ObjectMissingError(FileNotFoundError):
+    """Raised when an input object is definitively absent from object storage."""
 
 
 def normalize_object_key(object_key: str) -> str:
@@ -33,6 +40,27 @@ def upload_bytes(data: bytes, object_key: str, content_type: str | None = None) 
     return upload_fileobj(BytesIO(data), object_key, content_type=content_type)
 
 
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def quarantine_bytes(
+    data: bytes,
+    *,
+    case_id: int,
+    job_id: int,
+    filename: str,
+    reason: str,
+) -> tuple[str, str]:
+    """Persist an invalid input under a deterministic, auditable quarantine key."""
+    del reason  # the reason is persisted in the job record, never in an object key
+    safe_name = Path(filename).name or "upload.bin"
+    digest = sha256_bytes(data)
+    key = f"quarantine/{case_id}/{job_id}/{digest[:16]}-{safe_name}"
+    upload_bytes(data, key, content_type="application/octet-stream")
+    return key, digest
+
+
 def upload_path(
     path: str | Path,
     object_key: str,
@@ -50,7 +78,13 @@ def upload_path(
 
 def download_bytes(object_key: str) -> bytes:
     destination = BytesIO()
-    get_storage_backend().download_fileobj(normalize_object_key(object_key), destination)
+    try:
+        get_storage_backend().download_fileobj(normalize_object_key(object_key), destination)
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code in {"404", "NoSuchKey", "NotFound"}:
+            raise ObjectMissingError(f"Storage object not found: {object_key}") from exc
+        raise
     return destination.getvalue()
 
 

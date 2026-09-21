@@ -108,6 +108,9 @@ class Job(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
     result_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    input_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    result_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    quarantine_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 

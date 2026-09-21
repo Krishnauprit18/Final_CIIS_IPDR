@@ -9,7 +9,7 @@ from sqlalchemy import delete, or_, select, text, update
 from app.db.models import AuditLog, AuthSession, Case, CaseMembership, Job, SavedSearch, User
 from app.db.session import get_engine, session_scope
 
-EXPECTED_ALEMBIC_REVISION = "0004_phase15_auth_rbac"
+EXPECTED_ALEMBIC_REVISION = "0005_reliability_protection"
 
 
 def _model_to_dict(instance: Any) -> Dict[str, Any]:
@@ -404,3 +404,21 @@ def update_job_payload(job_id: int, payload: Dict[str, Any]) -> None:
             .where(Job.id == job_id)
             .values(payload_json=json.dumps(payload), updated_at=datetime.now())
         )
+
+
+def update_job_integrity(
+    job_id: int,
+    *,
+    input_sha256: Optional[str] = None,
+    result_sha256: Optional[str] = None,
+    quarantine_uri: Optional[str] = None,
+) -> None:
+    values: Dict[str, Any] = {"updated_at": datetime.now()}
+    if input_sha256 is not None:
+        values["input_sha256"] = input_sha256
+    if result_sha256 is not None:
+        values["result_sha256"] = result_sha256
+    if quarantine_uri is not None:
+        values["quarantine_uri"] = quarantine_uri
+    with session_scope() as db:
+        db.execute(update(Job).where(Job.id == job_id).values(**values))

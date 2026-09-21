@@ -31,6 +31,8 @@ if [ ! -x "$PYTHON" ]; then
   "$PYTHON" -m pip install -r "$ROOT/backend/requirements-dev.txt"
 fi
 
+"$PYTHON" -m pip install -r "$ROOT/backend/requirements-dev.txt" >/dev/null
+
 echo "CI PostgreSQL host port: $CI_POSTGRES_PORT"
 
 docker compose -p "$COMPOSE_PROJECT" -f compose.db.yaml up -d
@@ -61,8 +63,13 @@ fi
 
 cd "$ROOT/backend"
 
+mkdir -p "$ROOT/.ci-artifacts/backend"
+
 export DATABASE_URL="postgresql+psycopg://ciis:ciis@127.0.0.1:${CI_POSTGRES_PORT}/ciis"
 
 "$PYTHON" -m alembic upgrade head
 "$PYTHON" -m alembic current
-"$PYTHON" -m pytest -q
+"$PYTHON" -m pytest -q \
+  --cov=app \
+  --cov-report=term-missing \
+  --cov-report="xml:$ROOT/.ci-artifacts/backend/coverage.xml"

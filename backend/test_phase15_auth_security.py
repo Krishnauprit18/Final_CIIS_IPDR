@@ -32,7 +32,7 @@ def test_case_membership_is_in_the_persistence_model():
 
 
 def test_phase15_migration_is_the_expected_schema_head():
-    assert EXPECTED_ALEMBIC_REVISION == "0004_phase15_auth_rbac"
+    assert EXPECTED_ALEMBIC_REVISION == "0005_reliability_protection"
     security_migration = (
         PROJECT_ROOT
         / "backend"
